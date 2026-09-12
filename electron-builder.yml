@@ -1,0 +1,43 @@
+appId: jp.tobisako.shuffletube
+productName: ShuffleTube
+copyright: Copyright © 2026 tobisako
+directories:
+  buildResources: build
+  output: dist
+files:
+  - out/**
+  - package.json
+asar: true
+npmRebuild: false
+# Android 版 APK が dist/ にあれば同梱し、LAN サーバーの /app.apk で配信する（無ければ何もしない）
+extraResources:
+  - from: dist
+    to: .
+    filter:
+      - ShuffleTube.apk
+mac:
+  category: public.app-category.music
+  identity: null
+  target:
+    - target: dmg
+      arch: [arm64]
+    - target: dir
+      arch: [arm64]
+  darkModeSupport: true
+  artifactName: ${productName}-${version}-mac-${arch}.${ext}
+dmg:
+  sign: false
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+nsis:
+  artifactName: ${productName}-${version}-win-${arch}-setup.${ext}
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: ShuffleTube
+portable:
+  artifactName: ${productName}-${version}-win-${arch}-portable.${ext}

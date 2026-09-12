@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ShuffleTube</string>
+    <string name="title_activity_main">ShuffleTube</string>
+    <string name="package_name">jp.tobisako.shuffletube</string>
+    <string name="custom_url_scheme">jp.tobisako.shuffletube</string>
+</resources>

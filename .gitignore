@@ -1,0 +1,26 @@
+# 依存・ビルド成果物
+node_modules/
+out/
+dist/
+*.log
+.DS_Store
+
+# Android（生成物・ローカル設定・署名鍵）
+android/keystore/
+android/keystore.properties
+android/local.properties
+android/app/build/
+android/build/
+android/.gradle/
+android/.idea/
+android/*.iml
+android/app/*.iml
+android/capacitor-cordova-android-plugins/
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+android/app/src/main/assets/capacitor.plugins.json
+android/app/src/main/res/xml/config.xml
+
+# エディタ
+.vscode/
+.idea/
