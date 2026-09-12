@@ -96,7 +96,7 @@ npm run typecheck
 Android のビルドには JDK 21 と Android SDK（platforms;android-36、build-tools）が必要です。`JAVA_HOME` / `ANDROID_HOME` が未設定なら `scripts/build-android.sh` がよくある場所を探します。
 release 署名には `android/keystore.properties`（`storeFile` / `storePassword` / `keyAlias` / `keyPassword`）と鍵ファイルを用意します。無ければ debug 署名になります。鍵は Git に含めません。
 
-GitHub Actions（`.github/workflows/build.yml`）で macOS / Windows / Android を自動ビルドし、`v*` タグを push すると Release に成果物を添付します。
+GitHub Actions（`.github/workflows/build.yml`）で macOS / Windows / Android を自動ビルドし、`v*` タグを push すると Release に成果物を添付します。Android の release 署名には Secrets（`ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD`）が必要で、無い場合 CI は APK を添付しません（手元で署名した APK を Release に上げます）。
 
 ### 構成
 

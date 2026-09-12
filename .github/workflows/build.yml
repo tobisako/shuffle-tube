@@ -9,30 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  mac:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npx electron-vite build && npx electron-builder --mac --publish never
-        env: { CSC_IDENTITY_AUTO_DISCOVERY: "false" }
-      - uses: actions/upload-artifact@v4
-        with: { name: mac, path: dist/*.dmg }
-
-  win:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npx electron-vite build && npx electron-builder --win --publish never
-      - uses: actions/upload-artifact@v4
-        with: { name: win, path: dist/*.exe }
-
+  # Android を先に作り、署名済みのときだけデスクトップ版に同梱 & Release に添付する
   android:
     runs-on: ubuntu-latest
     env:
@@ -51,15 +28,51 @@ jobs:
         run: |
           mkdir -p android/keystore
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/keystore/release.jks
-          cat > android/keystore.properties <<EOF
+          cat > android/keystore.properties <<EOT
           storeFile=keystore/release.jks
           storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
           keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
-          EOF
+          EOT
       - run: bash scripts/build-android.sh
-      - uses: actions/upload-artifact@v4
+      - name: Upload APK (release 署名済みのときだけ。未署名の debug 版は配布しない)
+        if: env.HAS_SIGNING_KEY == 'true'
+        uses: actions/upload-artifact@v4
         with: { name: android, path: dist/ShuffleTube.apk }
+
+  mac:
+    needs: android
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Download APK (あれば同梱して /app.apk で配信できるようにする)
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with: { name: android, path: dist }
+      - run: npx electron-vite build && npx electron-builder --mac --publish never
+        env: { CSC_IDENTITY_AUTO_DISCOVERY: "false" }
+      - uses: actions/upload-artifact@v4
+        with: { name: mac, path: dist/*.dmg }
+
+  win:
+    needs: android
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Download APK (あれば同梱)
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with: { name: android, path: dist }
+      - run: npx electron-vite build && npx electron-builder --win --publish never
+      - uses: actions/upload-artifact@v4
+        with: { name: win, path: dist/*.exe }
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
