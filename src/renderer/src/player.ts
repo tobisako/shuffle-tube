@@ -37,25 +37,74 @@ let unmuteOnPlay = false
 let scrubbing = false
 let pendingSeek: number | null = null
 let lastDuration = 0
+let playerContainer: HTMLElement | null = null
+let playerCreatedAt = 0
+let lastErrorRefresh = { clipId: '', at: 0 }
+
+/**
+ * YouTube の埋め込みプレーヤーは、長く使い続けると古い版のまま残り、YouTube に再生を拒否される
+ * （2026-10 に約 3 週間つけっぱなしで「エラーコード 152-18」が多発し、作り直すと直った）。
+ * 作成からこの時間がたったら、別の動画を読み込む前にプレーヤーを作り直す。
+ */
+const PLAYER_MAX_AGE_MS = 4 * 60 * 60 * 1000
+/** 作り直しても直らない（動画側の理由の）エラー: 不正な ID / 見つからない / 埋め込み禁止 */
+const PERMANENT_ERRORS = new Set([2, 100, 101, 150])
 
 /* ---------- 生成 ---------- */
 export async function mountPlayer(container: HTMLElement): Promise<void> {
   if (player || container.dataset.mounted) return
   container.dataset.mounted = '1'
-  const inner = document.createElement('div')
-  container.appendChild(inner)
+  playerContainer = container
   try {
     yt = await loadYT()
   } catch (e) {
     toast((e as Error).message)
     return
   }
+  createPlayer()
+}
+
+function createPlayer(): void {
+  if (!yt || !playerContainer) return
+  const inner = document.createElement('div')
+  playerContainer.appendChild(inner)
+  ready = false
+  playerCreatedAt = Date.now()
   player = new yt.Player(inner, {
     width: '100%',
     height: '100%',
     playerVars: { rel: 0, playsinline: 1, modestbranding: 1, controls: 1, iv_load_policy: 3 },
     events: { onReady, onStateChange, onError, onPlaybackRateChange },
   })
+}
+
+/** YouTube プレーヤー（iframe）を作り直す。then があれば準備ができしだい、そのクリップを再生する */
+function refreshPlayer(then: PlayingRef | null): void {
+  trace('refreshPlayer', then)
+  try { player?.destroy() } catch { /* ignore */ }
+  player = null
+  ready = false
+  loadedVideoId = null
+  pendingPlay = then
+  if (playerContainer) playerContainer.replaceChildren()
+  useStore.setState({ playerReady: false, isPlaying: false })
+  window.api.setPlaybackState(false)
+  createPlayer()
+}
+
+/** 作成から時間がたったプレーヤーか（別の動画を読み込む前に作り直す） */
+function playerIsStale(): boolean {
+  return !!player && ready && Date.now() - playerCreatedAt > PLAYER_MAX_AGE_MS
+}
+
+/** 開発時の動作確認用 */
+if (import.meta.env.DEV) {
+  ;(window as unknown as { __playerDebug: unknown }).__playerDebug = {
+    refresh: () => refreshPlayer(useStore.getState().playing),
+    simulateError: (code: number) => onError({ data: code }),
+    age: () => Date.now() - playerCreatedAt,
+    makeStale: () => { playerCreatedAt = Date.now() - PLAYER_MAX_AGE_MS - 1000 },
+  }
 }
 
 function onReady(): void {
@@ -123,10 +172,19 @@ function onError(e: { data: number }): void {
     100: '動画が見つかりません（削除・非公開）',
     101: '埋め込み再生が許可されていません',
     150: '埋め込み再生が許可されていません',
+    152: 'YouTube に再生を拒否されました (152)',
     153: '埋め込み元の情報が不足しています (153)',
   }
   const s = useStore.getState()
   const clip = getPlayingClip(s)
+  // 動画側の理由でないエラーは、プレーヤーを作り直して同じクリップを 1 回だけ再試行する
+  if (clip && s.playing && !PERMANENT_ERRORS.has(e.data) &&
+      !(lastErrorRefresh.clipId === clip.id && Date.now() - lastErrorRefresh.at < 60_000)) {
+    lastErrorRefresh = { clipId: clip.id, at: Date.now() }
+    toast(`YouTube のプレーヤーを読み込み直して再試行します（エラー ${e.data}）`)
+    refreshPlayer({ playlistId: s.playing.playlistId, clipId: clip.id })
+    return
+  }
   const msg = msgs[e.data] || `エラー (${e.data})`
   if (clip && s.playing) updateClip(s.playing.playlistId, clip.id, { error: msg })
   toast(`再生できません: ${clip ? clip.title || clip.videoId : ''}（${msg}）`)
@@ -169,6 +227,24 @@ function applyVolumeRate(): void {
     if (unmuteOnPlay) { unmuteOnPlay = false; player.unMute() }
   } catch { /* ignore */ }
   volumeSyncAfter = Date.now() + 1500
+}
+
+/** 音量スライダーから: プレーヤーの音量を変えて覚える（保存は動かし終わってから） */
+let volumeSaveTimer: number | null = null
+export function setVolume(v: number): void {
+  const vol = Math.max(0, Math.min(100, Math.round(v)))
+  const s = useStore.getState()
+  useStore.setState({ settings: { ...s.settings, volume: vol } })
+  if (volumeSaveTimer) window.clearTimeout(volumeSaveTimer)
+  volumeSaveTimer = window.setTimeout(() => { window.api.saveSettings({ volume: useStore.getState().settings.volume }) }, 400)
+  // 1秒ごとの音量の読み取りが、変更前の値で上書きしないようにする
+  volumeSyncAfter = Date.now() + 1500
+  lastVolumeSeen = vol
+  if (!player) return
+  try {
+    player.setVolume(vol)
+    if (vol > 0 && player.isMuted() && !unmuteOnPlay) player.unMute()
+  } catch { /* ignore */ }
 }
 
 function fillTitleFromPlayer(): void {
@@ -349,6 +425,10 @@ export function play(playlistId: string, clipId: string, opts: { fromPrev?: bool
   updateSettings({ last: { playlistId, clipId } })
 
   const sameLoaded = loadedVideoId === clip.videoId && !clip.error
+  if (!sameLoaded && playerIsStale()) {
+    refreshPlayer({ playlistId, clipId })
+    return
+  }
   if (sameLoaded) {
     player.seekTo(clip.start, true)
     player.playVideo()
@@ -492,6 +572,10 @@ export function cue(playlistId: string, clipId: string): void {
     marks: videoChanged ? { start: null, end: null } : s.marks,
   })
   updateSettings({ last: { playlistId, clipId } })
+  if (loadedVideoId !== clip.videoId && playerIsStale()) {
+    refreshPlayer(null)
+    return
+  }
   if (loadedVideoId === clip.videoId && !clip.error) {
     try { player.pauseVideo(); player.seekTo(clip.start, true) } catch { /* ignore */ }
   } else {
@@ -594,3 +678,6 @@ export function closeClipEditor(cancel = false): void {
 export function setScrubbing(on: boolean): void {
   scrubbing = on
 }
+
+// 開発時のみ: 動作確認用にプレーヤーを公開
+if (import.meta.env.DEV) (window as unknown as { __player: () => YTPlayer | null }).__player = () => player

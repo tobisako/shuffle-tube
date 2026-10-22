@@ -5,6 +5,7 @@ import { addClips, getCurrentPlaylist, makeClip, removeFromLibrary, setLibraryMe
 import { play } from '../player'
 import { thumbUrl, watchUrl } from '../youtube'
 import { fmtTime } from '../time'
+import { isComposing } from '../ime'
 
 function fmtDate(ms: number): string {
   const d = new Date(ms)
@@ -18,6 +19,7 @@ export default function LibraryView(): JSX.Element {
   const target = useStore(getCurrentPlaylist)
   const playing = useStore(s => s.playing)
   const state = useStore(s => s)
+  const readOnly = useStore(s => s.readOnly)
   const [filter, setFilter] = useState('')
   const [memoEdit, setMemoEdit] = useState<string | null>(null)
 
@@ -47,11 +49,11 @@ export default function LibraryView(): JSX.Element {
         <span className="playlist-name lib-title">ライブラリ</span>
         <span className="count">{library.length} 本{filter && shown.length !== library.length ? `（表示 ${shown.length}）` : ''}</span>
         <input className="lib-filter" value={filter} onChange={e => setFilter(e.target.value)} placeholder="タイトル・投稿者・メモで絞り込み" />
-        <label className="lib-target">追加先
+        {!readOnly && <label className="lib-target">追加先
           <select value={target?.id ?? ''} onChange={e => updateSettings({ currentPlaylistId: e.target.value })}>
             {playlists.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-        </label>
+        </label>}
         <button className="text-btn" disabled={!library.length} onClick={() => play(LIBRARY_ID, libraryClipId(shown[0]?.videoId ?? library[0].videoId))} title="ライブラリの動画を上から順に連続再生">▶ 全て再生</button>
       </div>
       <ol className="items">
@@ -80,12 +82,12 @@ export default function LibraryView(): JSX.Element {
                     {v.author && <span className="author">{v.author}</span>}
                     <span className="lib-used">{used ? `使用 ${used} クリップ` : '未使用'}</span>
                     <span className="lib-date">{fmtDate(v.addedAt)}</span>
-                    {memoEdit === v.videoId ? (
+                    {readOnly ? (v.memo ? <span className="lib-memo">{v.memo}</span> : null) : memoEdit === v.videoId ? (
                       <input className="lib-memo-in" autoFocus value={v.memo} maxLength={80} placeholder="メモ"
                         onClick={e => e.stopPropagation()}
                         onChange={e => setLibraryMemo(v.videoId, e.target.value)}
                         onBlur={() => setMemoEdit(null)}
-                        onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') setMemoEdit(null) }} />
+                        onKeyDown={e => { if (isComposing(e)) return; if (e.key === 'Enter' || e.key === 'Escape') setMemoEdit(null) }} />
                     ) : (
                       <span className={'lib-memo' + (v.memo ? '' : ' empty')} onClick={e => { e.stopPropagation(); setMemoEdit(v.videoId) }} title="クリックでメモを編集">{v.memo || 'メモを追加'}</span>
                     )}
@@ -93,10 +95,10 @@ export default function LibraryView(): JSX.Element {
                 </div>
                 <div className="actions" onClick={e => e.stopPropagation()}>
                   <button title="プレビュー再生（区間マークで追加先に区間を登録できます）" onClick={() => play(LIBRARY_ID, libraryClipId(v.videoId))}>▶</button>
-                  <button title={`動画まるごと「${target?.name ?? ''}」に追加`} onClick={() => addWhole(v)}>＋</button>
-                  <button title="追加先プレイリストを開く" onClick={() => { if (target) switchPlaylist(target.id) }}>≡</button>
+                  {!readOnly && <button title={`動画まるごと「${target?.name ?? ''}」に追加`} onClick={() => addWhole(v)}>＋</button>}
+                  {!readOnly && <button title="追加先プレイリストを開く" onClick={() => { if (target) switchPlaylist(target.id) }}>≡</button>}
                   <button title="YouTube で開く" onClick={() => window.api.openExternal(watchUrl(v.videoId))}>↗</button>
-                  <button className="del" title="ライブラリから削除" onClick={() => remove(v)}>✕</button>
+                  {!readOnly && <button className="del" title="ライブラリから削除" onClick={() => remove(v)}>✕</button>}
                 </div>
               </div>
             </li>

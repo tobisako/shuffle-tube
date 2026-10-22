@@ -7,6 +7,8 @@ import { addClipFromSameVideo, closeClipEditor, onPlayingClipRemoved, openClipEd
 import { thumbUrl, watchUrl } from '../youtube'
 import { fmtDuration, fmtTime } from '../time'
 import RangeEditor from './RangeEditor'
+import { setDraggingClip } from '../dnd'
+import { isComposing } from '../ime'
 
 export default function ItemList(): JSX.Element | null {
   const pl = useStore(getCurrentPlaylist)
@@ -15,6 +17,7 @@ export default function ItemList(): JSX.Element | null {
   const playing = useStore(s => s.playing)
   const editing = useStore(s => s.editing)
   const focusName = useStore(s => s.focusNameInput)
+  const readOnly = useStore(s => s.readOnly)
   const nameRef = useRef<HTMLInputElement>(null)
   const [name, setName] = useState(pl?.name ?? '')
   const dragId = useRef<string | null>(null)
@@ -73,19 +76,20 @@ export default function ItemList(): JSX.Element | null {
           <select value={pl.id} onChange={e => switchPlaylist(e.target.value)} title="プレイリストを切り替え">
             {playlists.map(p => <option key={p.id} value={p.id}>{p.name}（{p.items.length}）</option>)}
           </select>
-          <button className="icon-btn" title="新しいプレイリスト" onClick={() => { newPlaylist(); useStore.setState({ focusNameInput: Date.now() }) }}>＋</button>
+          {!readOnly && <button className="icon-btn" title="新しいプレイリスト" onClick={() => { newPlaylist(); useStore.setState({ focusNameInput: Date.now() }) }}>＋</button>}
         </div>
       )}
       <div className="list-header">
-        <input ref={nameRef} className="playlist-name" value={name} maxLength={60} title="クリックで名前を変更"
+        <input ref={nameRef} className="playlist-name" value={name} maxLength={60} title={readOnly ? '' : 'クリックで名前を変更'} readOnly={readOnly}
           onChange={e => setName(e.target.value)} onBlur={commitName}
-          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+          onKeyDown={e => { if (isComposing(e)) return; if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
         <span className="count">{pl.items.length} クリップ</span>
-        <button className="text-btn danger" onClick={onClearList} title="このプレイリストのクリップを全て削除">全削除</button>
-        <button className="text-btn danger" onClick={onDeleteList} title="このプレイリストを削除">リスト削除</button>
+        {!readOnly && <button className="text-btn danger" onClick={onClearList} title="このプレイリストのクリップを全て削除">全削除</button>}
+        {!readOnly && <button className="text-btn danger" onClick={onDeleteList} title="このプレイリストを削除">リスト削除</button>}
       </div>
       <ol className="items" onDragLeave={e => { if (e.currentTarget === e.target) setDrop(null) }}>
-        {pl.items.length === 0 && (
+        {pl.items.length === 0 && readOnly && <li className="empty">このプレイリストにはクリップがありません</li>}
+        {pl.items.length === 0 && !readOnly && (
           <li className="empty">
             まだクリップがありません。<br />
             上の欄に YouTube の URL を貼り付けて「追加」してください。<br />
@@ -99,10 +103,10 @@ export default function ItemList(): JSX.Element | null {
             <li key={clip.id} className="item-wrap">
               <div
                 className={'item' + (isPlaying ? ' playing' : '') + (clip.error ? ' error' : '') + dropCls}
-                draggable
+                draggable={!readOnly}
                 onClick={() => play(pl.id, clip.id)}
-                onDragStart={e => { dragId.current = clip.id; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', clip.id) } catch { /* ignore */ } }}
-                onDragEnd={() => { dragId.current = null; setDrop(null) }}
+                onDragStart={e => { dragId.current = clip.id; setDraggingClip({ playlistId: pl.id, clipId: clip.id }); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', clip.id) } catch { /* ignore */ } }}
+                onDragEnd={() => { dragId.current = null; setDraggingClip(null); setDrop(null) }}
                 onDragOver={(e: DragEvent<HTMLDivElement>) => {
                   if (!dragId.current || dragId.current === clip.id) return
                   e.preventDefault()
@@ -135,12 +139,14 @@ export default function ItemList(): JSX.Element | null {
                   </div>
                 </div>
                 <div className="actions" onClick={e => e.stopPropagation()}>
+                  {!readOnly && <>
                   <button title="区間・メモを編集" className={editing?.clipId === clip.id ? 'on' : ''} onClick={() => (editing?.clipId === clip.id ? closeClipEditor(false) : openClipEditor(pl.id, clip.id, false))}>✎</button>
                   <button title="同じ動画から別の区間を追加" onClick={() => addClipFromSameVideo(pl.id, clip)}>＋</button>
                   <button title="上へ" onClick={() => moveClip(pl.id, idx, idx - 1)} disabled={idx === 0}>↑</button>
                   <button title="下へ" onClick={() => moveClip(pl.id, idx, idx + 1)} disabled={idx === pl.items.length - 1}>↓</button>
+                  </>}
                   <button title="YouTube で開く" onClick={() => window.api.openExternal(watchUrl(clip.videoId, clip.start))}>↗</button>
-                  <button className="del" title="削除" onClick={() => onRemove(clip)}>✕</button>
+                  {!readOnly && <button className="del" title="削除" onClick={() => onRemove(clip)}>✕</button>}
                 </div>
               </div>
               {editing?.clipId === clip.id && <RangeEditor pl={pl} clip={clip} isNew={editing.isNew} />}

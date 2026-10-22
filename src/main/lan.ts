@@ -2,6 +2,7 @@ import http from 'node:http'
 import os from 'node:os'
 import fs from 'node:fs'
 import path from 'node:path'
+import { execFileSync } from 'node:child_process'
 import { app } from 'electron'
 import type { AddressInfo } from 'node:net'
 import { serveStatic } from './server'
@@ -24,6 +25,7 @@ export function lanAddresses(): string[] {
   for (const [name, list] of Object.entries(os.networkInterfaces())) {
     for (const i of list ?? []) {
       if (i.family !== 'IPv4' || i.internal) continue
+      if (/^(utun|ipsec|ppp|tun|tap)/.test(name)) continue   // VPN のトンネルは LAN のスマホから届かない
       out.push({ name, addr: i.address })
     }
   }
@@ -43,12 +45,29 @@ export function findApk(): string | null {
   return null
 }
 
+/** この PC の Bonjour / mDNS 名（例 my-mac.local）。DHCP で IP が変わっても同じ URL で開ける */
+let cachedLocalName: string | null | undefined
+function localHostName(): string | null {
+  if (cachedLocalName !== undefined) return cachedLocalName
+  let name = ''
+  try {
+    if (process.platform === 'darwin') name = execFileSync('scutil', ['--get', 'LocalHostName'], { encoding: 'utf8', timeout: 2000 }).trim()
+    else name = os.hostname().split('.')[0]
+  } catch { name = '' }
+  cachedLocalName = /^[A-Za-z0-9-]+$/.test(name) ? `${name.toLowerCase()}.local` : null
+  return cachedLocalName
+}
+
 export function lanInfo(): LanInfo {
   const port = server ? listenPort : 0
+  const local = server ? localHostName() : null
   return {
     enabled: !!server,
     port,
-    urls: server ? lanAddresses().map(a => `http://${a}:${port}/`) : [],
+    // YouTube は IP アドレスのページに埋め込んだ動画の再生を拒否する（エラー 150）ため、
+    // IP をそのまま返す公開 DNS（nip.io）の名前で開いてもらう。例 192.168.0.5 → 192-168-0-5.nip.io
+    urls: server ? lanAddresses().map(a => `http://${a.replace(/\./g, '-')}.nip.io:${port}/`) : [],
+    localUrl: local ? `http://${local}:${port}/` : undefined,
     error: lastError,
     apk: !!findApk(),
   }

@@ -27,8 +27,12 @@ export interface AppState {
   isWeb: boolean
   /** Android アプリ版か */
   isNative: boolean
+  /** クラウド版（AWS）: 再生専用で、編集の操作を出さない */
+  readOnly: boolean
   /** スマホ表示の下部タブ */
   mobileTab: 'playlist' | 'library' | 'history'
+  /** クリップをドラッグ中なら、その元のプレイリスト ID（サイドバーの移動先表示に使う） */
+  draggingFrom: string | null
 }
 
 export const useStore = create<AppState>(() => ({
@@ -50,7 +54,9 @@ export const useStore = create<AppState>(() => ({
   focusNameInput: 0,
   isWeb: false,
   isNative: false,
+  readOnly: false,
   mobileTab: 'playlist',
+  draggingFrom: null,
 }))
 
 export const uid = (): string => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4)
@@ -108,7 +114,7 @@ export async function initStore(): Promise<void> {
     library.push({ videoId: c.videoId, title: c.title, author: c.author, duration: c.duration ?? null, memo: '', addedAt: c.addedAt })
     migrated++
   }
-  useStore.setState({ playlists, settings, history: data.history, library, loaded: true, isWeb: window.api.platform === 'web' || window.api.platform === 'android', isNative: window.api.platform === 'android', mobileTab: settings.view === 'library' ? 'library' : 'playlist' })
+  useStore.setState({ playlists, settings, history: data.history, library, loaded: true, isWeb: ['web', 'android', 'cloud'].includes(window.api.platform), isNative: window.api.platform === 'android', readOnly: window.api.platform === 'cloud', mobileTab: settings.view === 'library' ? 'library' : 'playlist' })
   if (settings.currentPlaylistId !== data.settings.currentPlaylistId) {
     window.api.saveSettings({ currentPlaylistId: settings.currentPlaylistId })
   }
@@ -286,6 +292,43 @@ export function moveClip(playlistId: string, from: number, to: number): void {
     const [c] = items.splice(from, 1)
     items.splice(to, 0, c)
     return { ...pl, items }
+  })
+}
+
+/**
+ * クリップを別のプレイリストへ移す（末尾に追加）。
+ * 移動先に同じ動画・同じ区間があれば移さない。戻り値 = 移したか
+ */
+export function moveClipToPlaylist(fromId: string, clipId: string, toId: string): boolean {
+  const s = useStore.getState()
+  if (fromId === toId) return false
+  const src = s.playlists.find(p => p.id === fromId)
+  const dst = s.playlists.find(p => p.id === toId)
+  const clip = src?.items.find(c => c.id === clipId)
+  if (!src || !dst || !clip) return false
+  if (dst.items.some(x => x.videoId === clip.videoId && x.start === clip.start && x.end === clip.end)) return false
+  setPlaylists(pls => pls.map(p => {
+    if (p.id === fromId) return { ...p, items: p.items.filter(c => c.id !== clipId) }
+    if (p.id === toId) return { ...p, items: [...p.items, clip] }
+    return p
+  }))
+  const patch: Partial<AppState> = {}
+  // 再生中のクリップなら、移動先のプレイリストで再生を続ける
+  if (s.playing?.playlistId === fromId && s.playing.clipId === clipId) patch.playing = { playlistId: toId, clipId }
+  if (s.editing?.clipId === clipId) patch.editing = null
+  if (Object.keys(patch).length) useStore.setState(patch)
+  if (patch.playing) updateSettings({ last: patch.playing })
+  return true
+}
+
+/** プレイリストの並び順を変える（from の位置にあるものを to の位置へ） */
+export function movePlaylist(from: number, to: number): void {
+  setPlaylists(pls => {
+    if (from < 0 || from >= pls.length || to < 0 || to >= pls.length || from === to) return pls
+    const next = pls.slice()
+    const [p] = next.splice(from, 1)
+    next.splice(to, 0, p)
+    return next
   })
 }
 

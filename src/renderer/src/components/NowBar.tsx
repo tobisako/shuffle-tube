@@ -1,6 +1,8 @@
-import type { JSX } from 'react'
+import type { CSSProperties, JSX } from 'react'
+import { useRef } from 'react'
 import { getPlayingClip, getPlayingPlaylist, useStore } from '../store'
-import { next, prev, togglePlay } from '../player'
+import { next, prev, setVolume, togglePlay } from '../player'
+import { useIsMobile } from '../useIsMobile'
 import { handleCommand } from '../commands'
 import { fmtTime } from '../time'
 
@@ -14,6 +16,9 @@ export default function NowBar(): JSX.Element {
   const mini = useStore(s => s.settings.miniPlayer)
   const top = useStore(s => s.settings.alwaysOnTop)
   const isWeb = useStore(s => s.isWeb)
+  const volume = useStore(s => s.settings.volume)
+  const isMobile = useIsMobile()
+  const beforeMute = useRef(50)
   const idx = clip && pl ? pl.items.findIndex(c => c.id === clip.id) + 1 : 0
   const title = clip ? clip.label || clip.title || clip.videoId : '—'
 
@@ -35,6 +40,18 @@ export default function NowBar(): JSX.Element {
         <button className="ctrl" onClick={prev} title="前のクリップ (←)">⏮</button>
         <button className="ctrl ctrl-main" onClick={togglePlay} title="再生 / 一時停止 (Space)">{isPlaying ? '⏸' : '▶'}</button>
         <button className="ctrl" onClick={next} title="次のクリップ (→)">⏭</button>
+        {!mini && !isMobile && (
+          <div className="volume" title={`音量 ${volume}`}>
+            <button className="vol-btn" title={volume ? '消音' : '消音を解除'}
+              onClick={() => { if (volume) { beforeMute.current = volume; setVolume(0) } else setVolume(beforeMute.current || 50) }}>
+              {volume === 0 ? '🔇' : volume < 40 ? '🔈' : volume < 75 ? '🔉' : '🔊'}
+            </button>
+            <input type="range" min={0} max={100} step={1} value={volume}
+              style={{ '--vol': `${volume}%` } as CSSProperties}
+              onChange={e => setVolume(Number(e.target.value))} />
+            <span className="vol-num">{volume}</span>
+          </div>
+        )}
         {!mini && (
           <>
             <button className={'ctrl toggle' + (shuffle ? ' on' : '')} onClick={() => handleCommand('toggle-shuffle')} title="シャッフル">🔀</button>

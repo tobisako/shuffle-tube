@@ -55,6 +55,14 @@ b { font-weight: 600; }
 .playlist-list li.active { background: var(--accent-soft); color: #fff; }
 .playlist-list li .pl-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .playlist-list li .pl-count { color: var(--muted); font-size: 12px; flex-shrink: 0; }
+.playlist-list li.pl-drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+.playlist-list li.pl-drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
+.playlist-list.dragging li.can-drop { outline: 1px dashed #777; outline-offset: -1px; }
+.playlist-list.dragging li.can-drop * { pointer-events: none; }
+.playlist-list li.drop-target, .playlist-list li.drop-target:hover { background: var(--accent); color: #fff; outline: 2px solid #fff; outline-offset: -2px; font-weight: 700; box-shadow: 0 0 12px rgba(255,0,51,.6); }
+.playlist-list li.drop-target .pl-name::before { content: "▶ "; }
+.playlist-list li .pl-drop-hint { flex-shrink: 0; font-size: 12px; background: #fff; color: var(--accent); border-radius: 999px; padding: 1px 8px; }
+.playlist-list li .pl-name-in { flex: 1; min-width: 0; background: var(--bg); border: 1px solid #666; border-radius: 6px; padding: 3px 6px; color: var(--text); font-size: 14px; outline: none; }
 .playlist-list li.playing .pl-name::before { content: "♪ "; color: var(--accent); }
 
 .history-list li { position: relative; padding: 7px 26px 7px 10px; border-radius: 8px; cursor: pointer; }
@@ -77,7 +85,7 @@ b { font-weight: 600; }
 .main { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 14px 20px 0; gap: 10px; }
 
 .player-wrap {
-  position: relative; width: 100%; aspect-ratio: 16 / 9; max-height: 44vh;
+  position: relative; width: min(100%, calc(44vh * 16 / 9)); aspect-ratio: 16 / 9; max-height: 44vh;
   margin: 0 auto; background: #000; border-radius: var(--radius); overflow: hidden; flex-shrink: 0;
 }
 .player-el, .player-el > div, .player-el iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
@@ -103,6 +111,12 @@ b { font-weight: 600; }
 .ctrl-main { background: #fff; color: #000; border-color: #fff; width: 44px; height: 44px; font-size: 17px; }
 .ctrl-main:hover { background: #ddd; }
 .ctrl.toggle.on { background: var(--accent-soft); border-color: var(--accent); color: #fff; }
+.volume { display: flex; align-items: center; gap: 4px; margin: 0 6px 0 2px; }
+.vol-btn { background: transparent; border: none; font-size: 16px; width: 28px; height: 28px; padding: 0; }
+.volume input[type=range] { -webkit-appearance: none; appearance: none; width: 96px; height: 4px; border-radius: 2px; cursor: pointer;
+  background: linear-gradient(to right, #fff 0 var(--vol), #555 var(--vol) 100%); }
+.volume input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 0 3px rgba(0,0,0,.6); }
+.vol-num { width: 24px; text-align: right; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .ctrl .one { position: absolute; right: 4px; bottom: 3px; font-size: 10px; font-weight: 700; }
 
 .clip-tools {
@@ -158,6 +172,13 @@ b { font-weight: 600; }
 .item .actions button:hover:not(:disabled) { background: var(--panel-2); }
 .item .actions .del:hover { border-color: var(--accent); color: var(--accent); }
 
+
+/* ---------- splitter（動画と一覧の境界） ---------- */
+.splitter { flex-shrink: 0; height: 10px; margin: -6px 0 -4px; cursor: row-resize; display: flex; align-items: center; justify-content: center; touch-action: none; }
+.splitter-grip { width: 100%; height: 2px; background: var(--border); border-radius: 1px; transition: background .15s; }
+.splitter:hover .splitter-grip, body.resizing .splitter-grip { background: var(--accent); }
+body.resizing, body.resizing * { cursor: row-resize !important; }
+body.resizing iframe { pointer-events: none; }
 
 /* ---------- range strip (動画のすぐ下) ---------- */
 .player-overlay { width: 100%; margin: 0 auto; padding: 10px 6px 0; flex-shrink: 0; }
@@ -258,7 +279,7 @@ b { font-weight: 600; }
 .app.mini { grid-template-columns: 1fr; }
 .app.mini .main { padding: 0; gap: 0; }
 .mini-drag { height: 28px; flex-shrink: 0; background: var(--panel); }
-.app.mini .player-wrap { max-width: none; max-height: none; border-radius: 0; flex: 1; aspect-ratio: auto; }
+.app.mini .player-wrap { width: 100%; max-width: none; max-height: none; border-radius: 0; flex: 1; aspect-ratio: auto; }
 .app.mini .now-bar { padding: 6px 10px; gap: 8px; background: var(--panel); border-top: 1px solid var(--border); }
 .app.mini .now-title { font-size: 12px; }
 .app.mini .now-sub { display: none; }

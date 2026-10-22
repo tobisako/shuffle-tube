@@ -24,3 +24,6 @@ android/app/src/main/res/xml/config.xml
 # エディタ
 .vscode/
 .idea/
+
+# クラウド版（AWS）の合言葉と書き込み用の鍵
+cloud/.deploy.json

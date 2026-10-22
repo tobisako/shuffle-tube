@@ -7,6 +7,7 @@ import { buildMenu } from './menu'
 import { ELECTRON_CLIENT, publish, subscribe } from './hub'
 import { fetchMeta } from './meta'
 import { lanInfo, startLanServer, stopLanServer } from './lan'
+import { startCloudSync } from './cloud'
 import type { Command, HistoryEntry, LibraryVideo, MediaKeysStatus, Playlist, Settings } from '@shared/types'
 
 // 動作確認用: YTPL_DEBUG_PORT=9222 で Chrome DevTools Protocol を開く
@@ -248,6 +249,7 @@ app.whenReady().then(async () => {
   await createWindow()
   applyMediaKeys()
   applyLan()
+  startCloudSync()
 
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
 })

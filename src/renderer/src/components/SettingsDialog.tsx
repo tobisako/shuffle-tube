@@ -142,6 +142,12 @@ export default function SettingsDialog(): JSX.Element {
                       <div className="sr-desc">スマホの Chrome でこの URL を開く（QR をカメラで読み取っても開けます）</div>
                       {lan.urls.map(u => <div key={u} className="lan-url">{u}</div>)}
                       {lan.urls.length === 0 && <div className="sr-desc">Wi-Fi の IP アドレスが見つかりません。ネットワーク接続を確認してください。</div>}
+                      {lan.urls.length > 0 && (
+                        <div className="sr-desc">
+                          ホーム画面に置く: スマホの Chrome で開き、右上の ⋮ →「ホーム画面に追加」。
+                          {lan.localUrl && <> PC の IP が変わっても切れない URL: <b className="lan-apk">{lan.localUrl}</b>（スマホによっては開けません。そのときは上の URL を使う）</>}
+                        </div>
+                      )}
                       {lan.apk && lan.urls[0] && <div className="sr-desc">Android アプリ版（APK）: スマホの Chrome で <b className="lan-apk">{lan.urls[0]}app.apk</b> を開くとダウンロードできます</div>}
                     </div>
                     {qr && <img className="lan-qr" src={qr} alt="QR" />}
@@ -152,6 +158,16 @@ export default function SettingsDialog(): JSX.Element {
                 <div className="sf-note">初回は macOS のファイアウォールが「接続を許可しますか」と聞くことがあります。許可してください。</div>
               </div>
             )}
+          </div>
+        )}
+        {isWeb && !isNative && !window.matchMedia('(display-mode: standalone)').matches && (
+          <div className="lan-section">
+            <div className="setting-row" style={{ cursor: 'default' }}>
+              <div className="sr-text">
+                <div className="sr-label">ホーム画面に置く</div>
+                <div className="sr-desc">Chrome 右上の ⋮ →「ホーム画面に追加」で、このページのショートカットをホーム画面に作れます。</div>
+              </div>
+            </div>
           </div>
         )}
         <div className="settings-foot">

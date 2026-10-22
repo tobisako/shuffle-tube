@@ -14,6 +14,7 @@ import MobileNav from './components/MobileNav'
 import { useIsMobile } from './useIsMobile'
 import SettingsDialog from './components/SettingsDialog'
 import Toast from './components/Toast'
+import Splitter from './components/Splitter'
 
 export default function App(): JSX.Element {
   const loaded = useStore(s => s.loaded)
@@ -22,6 +23,7 @@ export default function App(): JSX.Element {
   const settingsOpen = useStore(s => s.settingsOpen)
   const mobileTab = useStore(s => s.mobileTab)
   const isMobile = useIsMobile()
+  const readOnly = useStore(s => s.readOnly)
 
   useEffect(() => {
     initStore().catch(e => console.error('init failed', e))
@@ -38,8 +40,8 @@ export default function App(): JSX.Element {
         <main className="main">
           <PlayerHost />
           <NowBar />
-          {mobileTab !== 'history' && <ClipTools />}
-          {mobileTab !== 'history' && <AddBar />}
+          {mobileTab !== 'history' && !readOnly && <ClipTools />}
+          {mobileTab !== 'history' && !readOnly && <AddBar />}
           {mobileTab === 'playlist' && <ItemList />}
           {mobileTab === 'library' && <LibraryView />}
           {mobileTab === 'history' && <div className="mobile-history"><HistoryPanel /></div>}
@@ -59,8 +61,9 @@ export default function App(): JSX.Element {
         {mini && <div className="mini-drag drag" />}
         <PlayerHost />
         <NowBar />
-        {!mini && <ClipTools />}
-        {!mini && <AddBar />}
+        {!mini && !readOnly && <ClipTools />}
+        {!mini && !readOnly && <AddBar />}
+        {!mini && <Splitter />}
         {!mini && (view === 'library' ? <LibraryView /> : <ItemList />)}
       </main>
       {settingsOpen && <SettingsDialog />}

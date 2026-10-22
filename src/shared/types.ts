@@ -67,6 +67,8 @@ export interface Settings {
   lanPort: number
   /** Android 版: 同期先の Mac の URL（例 http://192.168.1.23:8787/） */
   macUrl: string
+  /** デスクトップ表示: プレーヤーの高さ（px）。null = 自動（16:9・画面の 44%） */
+  playerHeight: number | null
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -87,6 +89,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lanServer: false,
   lanPort: 8787,
   macUrl: '',
+  playerHeight: null,
 }
 
 export interface HistoryEntry {
@@ -127,6 +130,8 @@ export interface LanInfo {
   /** 実際に待ち受けているポート（0 = 停止中） */
   port: number
   urls: string[]
+  /** Bonjour 名の URL（例 http://my-mac.local:8787/）。PC の IP が変わっても使える */
+  localUrl?: string
   error?: string
   /** Android 版 APK を /app.apk で配信できるか */
   apk?: boolean
