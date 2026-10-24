@@ -23,7 +23,7 @@ export default function AddBar(): JSX.Element {
         placeholder={isLib
           ? 'ライブラリに保存する YouTube の URL / Shorts / 動画ID を貼り付け（複数はスペース区切り・再生リスト URL も可）'
           : 'YouTube の URL / Shorts / 動画ID を貼り付けてこのプレイリストに追加（複数はスペース区切り・再生リスト URL も可）'} />
-      <button type="submit" className="primary" disabled={busy}>{busy ? '…' : (isLib ? '保存' : '追加')}</button>
+      <button type="submit" className="primary" disabled={busy} title={isLib ? '貼り付けた URL の動画をライブラリに保存' : '貼り付けた URL の動画をこのプレイリストに追加（Enter でも追加）'}>{busy ? '…' : (isLib ? '保存' : '追加')}</button>
     </form>
   )
 }

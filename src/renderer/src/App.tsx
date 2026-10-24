@@ -57,6 +57,8 @@ export default function App(): JSX.Element {
   return (
     <div className={'app' + (mini ? ' mini' : '')}>
       {!mini && <Sidebar />}
+      {/* ウィンドウの上端（幅いっぱい・高さ 30px）なら、どこをつかんでもウィンドウを動かせるようにする */}
+      {!mini && <div className="titlebar-drag drag" />}
       <main className="main">
         {mini && <div className="mini-drag drag" />}
         <PlayerHost />

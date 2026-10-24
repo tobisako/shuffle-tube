@@ -24,7 +24,7 @@ export default function ClipTools(): JSX.Element | null {
       <button className="primary small" disabled={!hasMark} onClick={() => handleCommand('add-clip')} title="Command + Enter">
         ＋ この区間をクリップとして追加{fromLib && target ? `（→ ${target.name}）` : ''}
       </button>
-      {hasMark && <button className="text-btn small" onClick={clearMarks}>クリア</button>}
+      {hasMark && <button className="text-btn small" onClick={clearMarks} title="マークした開始点・終了点を消す">クリア</button>}
       <span className="ct-hint">再生しながら開始点・終了点を押すと、同じ動画から別の区間をいくつでも作れます</span>
     </div>
   )

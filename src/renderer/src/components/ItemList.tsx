@@ -19,6 +19,7 @@ export default function ItemList(): JSX.Element | null {
   const editing = useStore(s => s.editing)
   const focusName = useStore(s => s.focusNameInput)
   const readOnly = useStore(s => s.readOnly)
+  const loopOne = useStore(s => s.settings.loop === 'one')
   const nameRef = useRef<HTMLInputElement>(null)
   const [name, setName] = useState(pl?.name ?? '')
   const dragId = useRef<string | null>(null)
@@ -91,6 +92,7 @@ export default function ItemList(): JSX.Element | null {
           title="ON にしたリストどうしは、最後まで行ったら並び順で次の ON のリストへ続けて再生します">
           <span className="switch-mini"><input type="checkbox" checked={!!pl.chain} onChange={() => toggleChain(pl.id)} /><span className="knob" /></span>
           またいで再生
+          {pl.chain && loopOne && <span className="chain-note">（1曲リピート中はまたぎません）</span>}
         </label>
         {!readOnly && <button className="text-btn danger" onClick={onClearList} title="このプレイリストのクリップを全て削除">全削除</button>}
         {!readOnly && <button className="text-btn danger" onClick={onDeleteList} title="このプレイリストを削除">リスト削除</button>}
@@ -113,6 +115,7 @@ export default function ItemList(): JSX.Element | null {
                 className={'item' + (isPlaying ? ' playing' : '') + (clip.error ? ' error' : '') + dropCls}
                 draggable={!readOnly && memoEdit !== clip.id}
                 onClick={() => play(pl.id, clip.id)}
+                title={readOnly ? 'クリックで再生' : 'クリックで再生・ドラッグで並べ替え（左のプレイリスト名に落とすと移動）'}
                 onDragStart={e => { dragId.current = clip.id; setDraggingClip({ playlistId: pl.id, clipId: clip.id }); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', clip.id) } catch { /* ignore */ } }}
                 onDragEnd={() => { dragId.current = null; setDraggingClip(null); setDrop(null) }}
                 onDragOver={(e: DragEvent<HTMLDivElement>) => {

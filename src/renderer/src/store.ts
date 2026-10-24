@@ -30,6 +30,8 @@ export interface AppState {
   readOnly: boolean
   /** スマホ表示の下部タブ */
   mobileTab: 'playlist' | 'library' | 'history'
+  /** 再生中のクリップで、いま流している区間の番号（全区間の中で。不明なら -1） */
+  playingSeg: number
   /** クリップをドラッグ中なら、その元のプレイリスト ID（サイドバーの移動先表示に使う） */
   draggingFrom: string | null
 }
@@ -55,6 +57,7 @@ export const useStore = create<AppState>(() => ({
   readOnly: false,
   mobileTab: 'playlist',
   draggingFrom: null,
+  playingSeg: -1,
 }))
 
 export const uid = (): string => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4)

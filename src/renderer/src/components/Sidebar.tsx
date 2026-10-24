@@ -14,13 +14,13 @@ export default function Sidebar(): JSX.Element {
     <aside className="sidebar">
       <div className="brand drag"><span className="logo">▶</span> ShuffleTube</div>
       <div className="tabs">
-        <button className={tab === 'lists' ? 'on' : ''} onClick={() => useStore.setState({ sidebarTab: 'lists' })}>リスト</button>
-        <button className={tab === 'history' ? 'on' : ''} onClick={() => useStore.setState({ sidebarTab: 'history' })}>履歴</button>
+        <button className={tab === 'lists' ? 'on' : ''} onClick={() => useStore.setState({ sidebarTab: 'lists' })} title="ライブラリとプレイリストの一覧">リスト</button>
+        <button className={tab === 'history' ? 'on' : ''} onClick={() => useStore.setState({ sidebarTab: 'history' })} title="再生したクリップの履歴">履歴</button>
       </div>
       {tab === 'lists' ? <PlaylistNav /> : <HistoryPanel />}
       <div className="sidebar-tools">
-        <button className="text-btn" onClick={() => handleCommand('export')}>書き出し (JSON)</button>
-        {!readOnly && <button className="text-btn" onClick={() => handleCommand('import')}>読み込み (JSON)</button>}
+        <button className="text-btn" onClick={() => handleCommand('export')} title="全プレイリストを JSON ファイルに保存（バックアップ・他の PC への移行用）">書き出し (JSON)</button>
+        {!readOnly && <button className="text-btn" onClick={() => handleCommand('import')} title="書き出した JSON ファイルからプレイリストを追加">読み込み (JSON)</button>}
       </div>
       <div className="help">
         <div>Space: 再生 / 一時停止　← →: 前 / 次</div>
@@ -146,10 +146,8 @@ function PlaylistNav(): JSX.Element {
               ? <span className="pl-drop-hint">ここへ移動</span>
               : <>
                 <button type="button" className={'pl-chain' + (pl.chain ? ' on' : '')} draggable={false}
-                  title={pl.chain ? 'またいで再生: ON（最後まで行ったら次の ON のリストへ続ける）。クリックで OFF' : 'またいで再生: OFF（このリストの中だけ）。クリックで ON'}
-                  onClick={e => { e.stopPropagation(); toggleChain(pl.id) }} onDoubleClick={e => e.stopPropagation()}>
-                  <span className="pl-chain-knob" />
-                </button>
+                  title={pl.chain ? '🔗 またいで再生: ON（このリストの最後まで行ったら、次の 🔗 ON のリストへ続ける）。クリックで OFF' : '🔗 またいで再生: OFF（このリストの中だけで再生）。クリックで ON'}
+                  onClick={e => { e.stopPropagation(); toggleChain(pl.id) }} onDoubleClick={e => e.stopPropagation()}>🔗</button>
                 <span className="pl-count">{pl.items.length}</span>
               </>}
           </li>

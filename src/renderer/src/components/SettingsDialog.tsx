@@ -118,14 +118,14 @@ export default function SettingsDialog(): JSX.Element {
           <div className="sf-line">記憶中の音量: <b>{Math.round(settings.volume)}</b>　再生速度: <b>{settings.playbackRate}x</b></div>
           <div className="sf-line">
             視聴履歴: <b>{historyCount}</b> 件
-            {historyCount > 0 && <button className="text-btn small danger" onClick={() => { if (window.confirm('視聴履歴を全て消去しますか？')) clearHistory() }}>消去</button>}
+            {historyCount > 0 && <button className="text-btn small danger" title="視聴履歴を全て消す" onClick={() => { if (window.confirm('視聴履歴を全て消去しますか？')) clearHistory() }}>消去</button>}
           </div>
           {!isWeb && settings.mediaKeys && mk && (
             <div className="sf-line">
               メディアキー: <b>{mk.registered ? '有効' : '未登録'}</b>
               {!mk.trusted && <>
                 <span className="sf-warn">アクセシビリティの許可が必要です</span>
-                <button className="text-btn small" onClick={requestAccess}>許可を求める…</button>
+                <button className="text-btn small" onClick={requestAccess} title="メディアキーに必要な、macOS のアクセシビリティの許可を求める">許可を求める…</button>
               </>}
             </div>
           )}

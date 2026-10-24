@@ -57,3 +57,21 @@ export function totalLength(c: Clip, dur: number | null): number | null {
   }
   return sum
 }
+
+/**
+ * 重なる区間を上下の段に分ける。戻り値 lane[i] = i 番目の区間の段（0 が上）、count = 段の数。
+ * 開始の早い順に、前の区間と重ならない一番上の段へ入れる
+ */
+export function segmentLanes(segs: Segment[], dur: number): { lane: number[]; count: number } {
+  const order = segs.map((g, i) => i).sort((a, b) => segs[a].start - segs[b].start)
+  const laneEnd: number[] = []
+  const lane = new Array<number>(segs.length).fill(0)
+  for (const i of order) {
+    const g = segs[i]
+    const end = g.end ?? dur
+    let k = laneEnd.findIndex(e => e <= g.start)
+    if (k < 0) { k = laneEnd.length; laneEnd.push(end) } else laneEnd[k] = end
+    lane[i] = k
+  }
+  return { lane, count: Math.max(1, laneEnd.length) }
+}

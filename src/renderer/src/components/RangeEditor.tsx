@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Clip, Playlist, Segment } from '@shared/types'
 import { getPlayingClip, toast, toggleSegmentDisabled, updateClip, useStore } from '../store'
 import { closeClipEditor, currentTimeOf, previewClip, seekPreview, selectSegment, setScrubbing } from '../player'
-import { MAX_SEGMENTS, SEG_COLOR_CHOICES, clipPatchFromSegments, patchSegment, segColor, segmentsOf, totalLength } from '../segments'
+import { MAX_SEGMENTS, SEG_COLOR_CHOICES, clipPatchFromSegments, patchSegment, segColor, segmentLanes, segmentsOf, totalLength } from '../segments'
 import { fmtDuration, fmtTime } from '../time'
 
 const MIN_GAP = 0.5
@@ -299,6 +299,11 @@ export default function RangeEditor({ pl, clip, isNew }: { pl: Playlist; clip: C
   const len = endOrDur - sel.start
   const total = totalLength(clip, dur)
   const selColor = segColor(sel, selIdx)
+  // 区間が重なるときは上下の段に分けて描く
+  const lanes = segmentLanes(segs, dur)
+  const laneStyle = (i: number): CSSProperties => (lanes.count > 1
+    ? { top: `${(lanes.lane[i] * 100) / lanes.count}%`, bottom: 'auto', height: `calc(${100 / lanes.count}% - 2px)` }
+    : {})
   const startPct = toPct(sel.start)
   const endPct = toPct(endOrDur)
   const headPct = isLoaded && currentTime >= win[0] && currentTime <= win[1] ? toPct(currentTime) : null
@@ -378,15 +383,15 @@ export default function RangeEditor({ pl, clip, isNew }: { pl: Playlist; clip: C
       </div>
 
       <div ref={wrapRef} className="re-track-wrap">
-        <div ref={trackRef} className={'re-track' + (panning ? ' panning' : '')} onContextMenu={onTrackContextMenu} onPointerDown={onTrackDown} onPointerMove={onTrackMove} onPointerUp={onTrackUp} onPointerCancel={onTrackUp}>
+        <div ref={trackRef} className={'re-track' + (panning ? ' panning' : '')} style={lanes.count >= 3 ? { height: lanes.count * 16 } : undefined} onContextMenu={onTrackContextMenu} onPointerDown={onTrackDown} onPointerMove={onTrackMove} onPointerUp={onTrackUp} onPointerCancel={onTrackUp}>
           {voidLeftPct > 0 && <div className="re-void re-void-left" style={{ left: 0, width: `${voidLeftPct}%` }} />}
           {voidRightPct > 0 && <div className="re-void re-void-right" style={{ right: 0, width: `${voidRightPct}%` }} />}
           {ticks.map(t => <div key={t} className="re-tick" style={{ left: `${toPctRaw(t)}%` }}><span>{fmtTime(t, false)}</span></div>)}
           {segs.map((g, i) => i === selIdx ? null : (
             <div key={i} className={'re-range re-range-other' + (g.disabled ? ' off' : '')}
-              style={{ left: `${toPct(g.start)}%`, width: `${Math.max(toPct(g.end ?? dur) - toPct(g.start), 0)}%`, '--seg': segColor(g, i) } as CSSProperties} />
+              style={{ left: `${toPct(g.start)}%`, width: `${Math.max(toPct(g.end ?? dur) - toPct(g.start), 0)}%`, '--seg': segColor(g, i), ...laneStyle(i) } as CSSProperties} />
           ))}
-          <div className={'re-range' + (sel.disabled ? ' off' : '')} style={{ left: `${startPct}%`, width: `${Math.max(endPct - startPct, 0)}%`, '--seg': selColor } as CSSProperties} />
+          <div className={'re-range' + (sel.disabled ? ' off' : '')} style={{ left: `${startPct}%`, width: `${Math.max(endPct - startPct, 0)}%`, '--seg': selColor, ...laneStyle(selIdx) } as CSSProperties} />
           {headPct != null && <div className="re-head-line" style={{ left: `${headPct}%` }} />}
           <div className="re-handle re-handle-start" style={{ left: `${startPct}%`, '--seg': selColor } as CSSProperties}
             onPointerDown={onHandleDown('start')} onPointerMove={onHandleMove} onPointerUp={onHandleUp} onPointerCancel={onHandleUp} title="ドラッグで開始位置を変更">
@@ -467,7 +472,7 @@ export default function RangeEditor({ pl, clip, isNew }: { pl: Playlist; clip: C
       <div className="re-actions">
         <button type="button" className="text-btn small" onClick={() => closeClipEditor(true)}
           title={isNew ? 'この新しい区間を削除して閉じる' : '開いた時点の区間・色・メモに戻して閉じる'}>キャンセル</button>
-        <button type="button" className="primary small" onClick={() => closeClipEditor(false)}>完了</button>
+        <button type="button" className="primary small" onClick={() => closeClipEditor(false)} title="変更を残したまま閉じる（変更はすでに保存されています）">完了</button>
       </div>
     </div>
   )

@@ -31,6 +31,15 @@ let segIndex = 0
 let freePlay = false
 /** 前回の監視で読んだ再生位置（バーのクリックなどで位置が飛んだかを見る） */
 let lastTickT = -1
+/** アプリ自身がシークした時刻（直後の位置の飛びは、ユーザーの操作と見なさない） */
+let appSeekAt = 0
+
+/** アプリ自身のシーク（区間の切り替え・頭出しなど） */
+function appSeek(t: number): void {
+  lastTickT = t
+  appSeekAt = Date.now()
+  player?.seekTo(t, true)
+}
 
 /**
  * 再生位置 t に合わせて、どの区間を流すかを決め直す（バーのクリックや YouTube 側のシークバーで位置が飛んだとき）。
@@ -38,7 +47,10 @@ let lastTickT = -1
  */
 function syncSegToTime(clip: Clip, t: number): void {
   const segs = playSegmentsOf(clip)
-  const inside = segs.findIndex(g => t >= g.start - 0.3 && (g.end == null || t < g.end - 0.05))
+  const has = (g: Segment): boolean => t >= g.start - 0.3 && (g.end == null || t < g.end - 0.05)
+  // 区間が重なっている所では、いま流している区間を優先する
+  if (segs[segIndex] && has(segs[segIndex])) { freePlay = false; return }
+  const inside = segs.findIndex(has)
   if (inside >= 0) { segIndex = inside; freePlay = false; return }
   let next = -1
   for (let i = 0; i < segs.length; i++) if (segs[i].start > t && (next < 0 || segs[i].start < segs[next].start)) next = i
@@ -179,7 +191,7 @@ function onStateChange(e: { data: number }): void {
       // プレビュー用の「読み込んで止める」
       pauseAfterPlaying = false
       player.pauseVideo()
-      if (pendingSeek != null) { player.seekTo(pendingSeek, true); pendingSeek = null }
+      if (pendingSeek != null) { appSeek(pendingSeek); pendingSeek = null }
       applyVolumeRate()
       fillTitleFromPlayer()
       return
@@ -327,7 +339,7 @@ function tick(): void {
 
   // 位置が飛んだ（バーのクリック・YouTube 側のシークバー）ら、流す区間を決め直す。編集中は選んでいる区間のまま
   const editingThis = !!(s.editing && s.editing.clipId === clip.id)
-  if (!editingThis && hasPlayedThisLoad && !scrubbing && lastTickT >= 0 && Math.abs(t - lastTickT) > 1.5) {
+  if (!editingThis && hasPlayedThisLoad && !scrubbing && lastTickT >= 0 && Date.now() - appSeekAt > 1000 && Math.abs(t - lastTickT) > 1.5) {
     syncSegToTime(clip, t)
     clipEndedFired = false
   }
@@ -335,11 +347,14 @@ function tick(): void {
 
   // 区間の終わりで止めた後、区間内に戻ったら終了判定を再び有効にする
   const seg = currentSeg(clip)
+  // いま流している区間の番号を画面へ（区間が重なっていても、どれを流しているか分かるように）
+  const segAll = segmentsOf(clip).findIndex(g => g.start === seg.start && g.end === seg.end)
+  if (segAll !== s.playingSeg) useStore.setState({ playingSeg: segAll })
   if (clipEndedFired && seg.end != null && t < seg.end - 0.5) clipEndedFired = false
 
   // 編集中: 再生位置が開始バーより前に行ったら開始位置へ戻す（YouTube 側のシークバー操作を含む）
   if (s.editing && s.editing.clipId === clip.id && s.isPlaying && hasPlayedThisLoad && !scrubbing && t < seg.start - 0.3) {
-    try { player.seekTo(seg.start, true) } catch { /* ignore */ }
+    try { appSeek(seg.start) } catch { /* ignore */ }
     return
   }
 
@@ -374,7 +389,7 @@ function onClipEnded(): void {
   if (s.editing && s.editing.clipId === clip.id) {
     // 区間エディタで編集中: 次へ進まず、選んでいる区間を繰り返し再生し続ける
     clipEndedFired = false
-    player.seekTo(currentSeg(clip).start, true)
+    appSeek(currentSeg(clip).start)
     player.playVideo()
     return
   }
@@ -384,14 +399,14 @@ function onClipEnded(): void {
   if (segIndex < segs.length - 1) {
     segIndex++
     clipEndedFired = false
-    player.seekTo(segs[segIndex].start, true)
+    appSeek(segs[segIndex].start)
     player.playVideo()
     return
   }
   if (s.settings.loop === 'one') {
     segIndex = 0
     clipEndedFired = false
-    player.seekTo(firstStart(clip), true)
+    appSeek(firstStart(clip))
     player.playVideo()
     return
   }
@@ -402,7 +417,20 @@ function onClipEnded(): void {
     window.api.setPlaybackState(false)
     return
   }
-  play(nextRef.playlistId, nextRef.clipId)
+  playNext(nextRef)
+}
+
+/**
+ * 次のクリップを再生する。リストをまたいだときは、再生中のリストを表示していたなら表示も次のリストへ切り替える
+ * （別のリストを見ているときは、見ている画面を変えない）
+ */
+function playNext(ref: PlayingRef): void {
+  const s = useStore.getState()
+  const from = s.playing?.playlistId
+  if (from && ref.playlistId !== from && s.settings.view === 'playlist' && s.settings.currentPlaylistId === from) {
+    updateSettings({ currentPlaylistId: ref.playlistId })
+  }
+  play(ref.playlistId, ref.clipId)
 }
 
 /**
@@ -519,7 +547,7 @@ export function play(playlistId: string, clipId: string, opts: { fromPrev?: bool
     return
   }
   if (sameLoaded) {
-    player.seekTo(firstStart(clip), true)
+    appSeek(firstStart(clip))
     player.playVideo()
     if (s.isPlaying) onStartedPlaying()   // 状態変化イベントが来ないので直接
   } else {
@@ -536,7 +564,7 @@ export function next(): void {
   if (!s.playing) { playFirstOfCurrent(); return }
   const ref = nextPlayRef()
   if (!ref) { toast('リストの最後です'); return }
-  play(ref.playlistId, ref.clipId)
+  playNext(ref)
 }
 
 export function prev(): void {
@@ -549,17 +577,17 @@ export function prev(): void {
   if (clip) {
     // 区間の頭から 3 秒以降なら区間の頭へ、それより前で前の区間があればその頭へ
     const seg = currentSeg(clip)
-    if (t - seg.start > 3) { clipEndedFired = false; player.seekTo(seg.start, true); player.playVideo(); return }
+    if (t - seg.start > 3) { clipEndedFired = false; appSeek(seg.start); player.playVideo(); return }
     if (segIndex > 0 && !(s.editing && s.editing.clipId === clip.id)) {
       segIndex--
       clipEndedFired = false
-      player.seekTo(playSegmentsOf(clip)[segIndex].start, true)
+      appSeek(playSegmentsOf(clip)[segIndex].start)
       player.playVideo()
       return
     }
   }
   const id = prevClipId()
-  if (!id) { if (clip) { clipEndedFired = false; player.seekTo(firstStart(clip), true) } return }
+  if (!id) { if (clip) { clipEndedFired = false; appSeek(firstStart(clip)) } return }
   play(s.playing.playlistId, id, { fromPrev: true })
 }
 
@@ -585,7 +613,7 @@ export function togglePlay(): void {
       if (seg.end != null) {
         if (!(s.editing && s.editing.clipId === clip.id)) segIndex = 0
         clipEndedFired = false
-        player.seekTo(currentSeg(clip).start, true)
+        appSeek(currentSeg(clip).start)
       }
     }
     player.playVideo()
@@ -687,7 +715,7 @@ export function cue(playlistId: string, clipId: string): void {
     return
   }
   if (loadedVideoId === clip.videoId && !clip.error) {
-    try { player.pauseVideo(); player.seekTo(firstStart(clip), true) } catch { /* ignore */ }
+    try { player.pauseVideo(); appSeek(firstStart(clip)) } catch { /* ignore */ }
   } else {
     loadedVideoId = clip.videoId
     lastDuration = 0
@@ -721,6 +749,7 @@ export function seekPreview(t: number, final: boolean): void {
     return
   }
   if (pauseAfterPlaying) { pendingSeek = t; return }
+  lastTickT = t
   player.seekTo(t, final)
   if (!s.isPlaying) { try { player.pauseVideo() } catch { /* ignore */ } }
 }
@@ -743,7 +772,7 @@ export function previewClip(): void {
     player.loadVideoById({ videoId: clip.videoId, startSeconds: from })
     return
   }
-  player.seekTo(from, true)
+  appSeek(from)
   player.playVideo()
 }
 

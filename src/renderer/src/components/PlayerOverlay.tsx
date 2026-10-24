@@ -2,7 +2,7 @@ import type { JSX } from 'react'
 import { LIBRARY_ID } from '@shared/types'
 import { getCurrentPlaylist, getPlayingClip, getPlayingPlaylist, useStore } from '../store'
 import { fmtDuration, fmtTime } from '../time'
-import { segColor, segmentsOf } from '../segments'
+import { segColor, segmentLanes, segmentsOf } from '../segments'
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react'
 import { useRef } from 'react'
 import { seekTo, setScrubbing } from '../player'
@@ -23,6 +23,7 @@ export default function PlayerOverlay(): JSX.Element | null {
   const marks = useStore(s => s.marks)
   const fromLib = useStore(s => s.playing?.playlistId === LIBRARY_ID)
   const drag = useRef<{ last: number } | null>(null)
+  const playingSeg = useStore(s => s.playingSeg)
 
   if (!clip) return null
   const dur = clip.duration ?? (loadedDuration > 0 ? loadedDuration : null)
@@ -30,8 +31,11 @@ export default function PlayerOverlay(): JSX.Element | null {
   const pct = (t: number): number => clamp((t / dur) * 100, 0, 100)
 
   const segs = segmentsOf(clip)
-  // ラベルに出すのは、いま再生位置がある区間（どれにも入っていなければ 1 つ目）
-  const curIdx = Math.max(0, segs.findIndex(g => currentTime >= g.start - 0.3 && currentTime <= (g.end ?? dur) + 0.3))
+  // ラベルに出すのは、いま流している区間（分からなければ再生位置がある区間、どれにも入っていなければ 1 つ目）
+  const curIdx = playingSeg >= 0 && playingSeg < segs.length ? playingSeg
+    : Math.max(0, segs.findIndex(g => currentTime >= g.start - 0.3 && currentTime <= (g.end ?? dur) + 0.3))
+  // 区間が重なるときは上下の段に分けて描く（段が増えるほどバーを太くする）
+  const lanes = segmentLanes(segs, dur)
   const cur = segs[curIdx]
   const start = cur.start
   const end = cur.end ?? dur
@@ -70,12 +74,15 @@ export default function PlayerOverlay(): JSX.Element | null {
     <div className="player-overlay">
       <div className="po-hit" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
         title="クリック・ドラッグでその位置へ移動">
-      <div className="po-track">
+      <div className="po-track" style={lanes.count > 1 ? { height: lanes.count * 5 + 2 } : undefined}>
         {others.map(c => (
           <div key={c.id} className="po-other" style={{ left: `${pct(c.start)}%`, width: `${Math.max(pct(c.end ?? dur) - pct(c.start), 0.4)}%` }} />
         ))}
         {!isWhole && segs.map((g, i) => (
-          <div key={i} className={'po-range' + (g.disabled ? ' off' : '')} style={{ left: `${pct(g.start)}%`, width: `${Math.max(pct(g.end ?? dur) - pct(g.start), 0.4)}%`, '--seg': segColor(g, i) } as CSSProperties} />
+          <div key={i} className={'po-range' + (g.disabled ? ' off' : '') + (i === curIdx ? ' cur' : '')} style={{
+            left: `${pct(g.start)}%`, width: `${Math.max(pct(g.end ?? dur) - pct(g.start), 0.4)}%`, '--seg': segColor(g, i),
+            ...(lanes.count > 1 ? { top: `${(lanes.lane[i] * 100) / lanes.count}%`, height: `calc(${100 / lanes.count}% - 1px)`, bottom: 'auto' } : {}),
+          } as CSSProperties} />
         ))}
         {hasMark && <div className="po-mark" style={{ left: `${pct(mStart)}%`, width: `${Math.max(pct(mEnd) - pct(mStart), 0.4)}%` }} />}
         <div className="po-head" style={{ left: `${pct(currentTime)}%` }} />
