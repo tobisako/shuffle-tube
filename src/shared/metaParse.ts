@@ -1,4 +1,4 @@
-/** YouTube のメタデータ取得ロジック（main と Android 版で共有）。HTTP の実行は fetchText / fetchJson に委ねる */
+/** YouTube のメタデータ取得ロジック（main で使う）。HTTP の実行は fetchText / fetchJson に委ねる */
 import type { VideoMeta } from './types'
 
 export const ID_RE = /^[A-Za-z0-9_-]{11}$/

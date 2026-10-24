@@ -1,5 +1,15 @@
 /** 共有型定義 (main / preload / renderer) */
 
+/** クリップの中の区間 */
+export interface Segment {
+  start: number
+  /** null = 動画の最後まで */
+  end: number | null
+  color?: string
+  /** true = 一時的に再生しない（無効） */
+  disabled?: boolean
+}
+
 export interface Clip {
   id: string
   videoId: string
@@ -15,12 +25,20 @@ export interface Clip {
   /** 動画の長さ（秒）。取得できていなければ null */
   duration?: number | null
   error?: string
+  /** 1 つ目の区間（start〜end）の色。無ければ既定の色 */
+  color?: string
+  /** 1 つ目の区間を一時的に再生しない */
+  disabled?: boolean
+  /** 2 つ目以降の区間（最大 4 つ、合計 5 つ）。1 つ目から順に続けて再生する */
+  more?: Segment[]
 }
 
 export interface Playlist {
   id: string
   name: string
   items: Clip[]
+  /** ON: このリストの最後まで行ったら、並び順で次にある ON のリストへ続けて再生する */
+  chain?: boolean
 }
 
 /** ライブラリ（動画の保管庫）の 1 件 */
@@ -65,8 +83,6 @@ export interface Settings {
   /** スマホ連携: 同じ Wi-Fi に HTTP サーバーを公開する */
   lanServer: boolean
   lanPort: number
-  /** Android 版: 同期先の Mac の URL（例 http://192.168.1.23:8787/） */
-  macUrl: string
   /** デスクトップ表示: プレーヤーの高さ（px）。null = 自動（16:9・画面の 44%） */
   playerHeight: number | null
 }
@@ -88,7 +104,6 @@ export const DEFAULT_SETTINGS: Settings = {
   view: 'playlist',
   lanServer: false,
   lanPort: 8787,
-  macUrl: '',
   playerHeight: null,
 }
 
@@ -133,8 +148,6 @@ export interface LanInfo {
   /** Bonjour 名の URL（例 http://my-mac.local:8787/）。PC の IP が変わっても使える */
   localUrl?: string
   error?: string
-  /** Android 版 APK を /app.apk で配信できるか */
-  apk?: boolean
 }
 
 export interface AppData {
@@ -181,17 +194,5 @@ export interface Api {
   /** 他の端末（スマホなど）からの変更を受け取る */
   onDataChanged(cb: (change: DataChange) => void): () => void
   lanInfo(): Promise<LanInfo>
-  /** Android 版: Mac の LAN サーバーとの明示同期（CORS の制約が無いネイティブ HTTP で行う） */
-  remote?: {
-    fetchData(baseUrl: string): Promise<SharedData>
-    pushData(baseUrl: string, data: SharedData): Promise<void>
-  }
   platform: string
-}
-
-/** 端末間で共有するデータ（設定は含まない） */
-export interface SharedData {
-  playlists: Playlist[]
-  library: LibraryVideo[]
-  history: HistoryEntry[]
 }

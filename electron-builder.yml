@@ -9,12 +9,6 @@ files:
   - package.json
 asar: true
 npmRebuild: false
-# Android 版 APK が dist/ にあれば同梱し、LAN サーバーの /app.apk で配信する（無ければ何もしない）
-extraResources:
-  - from: dist
-    to: .
-    filter:
-      - ShuffleTube.apk
 mac:
   category: public.app-category.music
   identity: null

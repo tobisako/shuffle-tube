@@ -2,12 +2,17 @@ import type { JSX } from 'react'
 import { LIBRARY_ID } from '@shared/types'
 import { getCurrentPlaylist, getPlayingClip, getPlayingPlaylist, useStore } from '../store'
 import { fmtDuration, fmtTime } from '../time'
+import { segColor, segmentsOf } from '../segments'
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react'
+import { useRef } from 'react'
+import { seekTo, setScrubbing } from '../player'
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v))
 
 /**
  * プレーヤー直下の区間バー: 動画全体に対する区間の位置を描画する
- *  - 赤: 再生中の区間　- 薄い白: 同じ動画の他のクリップ　- 黄の点線: マーク中の仮の区間　- 白線: 現在位置
+ *  - クリック・ドラッグでその位置へ移る
+ *  - 色付き: 再生中のクリップの区間（区間ごとの色）　- 薄い白: 同じ動画の他のクリップ　- 黄の点線: マーク中の仮の区間　- 白線: 現在位置
  */
 export default function PlayerOverlay(): JSX.Element | null {
   const clip = useStore(getPlayingClip)
@@ -17,15 +22,20 @@ export default function PlayerOverlay(): JSX.Element | null {
   const loadedDuration = useStore(s => s.duration)
   const marks = useStore(s => s.marks)
   const fromLib = useStore(s => s.playing?.playlistId === LIBRARY_ID)
+  const drag = useRef<{ last: number } | null>(null)
 
   if (!clip) return null
   const dur = clip.duration ?? (loadedDuration > 0 ? loadedDuration : null)
   if (!dur || dur <= 0) return null
   const pct = (t: number): number => clamp((t / dur) * 100, 0, 100)
 
-  const start = clip.start
-  const end = clip.end ?? dur
-  const isWhole = clip.start === 0 && clip.end == null
+  const segs = segmentsOf(clip)
+  // ラベルに出すのは、いま再生位置がある区間（どれにも入っていなければ 1 つ目）
+  const curIdx = Math.max(0, segs.findIndex(g => currentTime >= g.start - 0.3 && currentTime <= (g.end ?? dur) + 0.3))
+  const cur = segs[curIdx]
+  const start = cur.start
+  const end = cur.end ?? dur
+  const isWhole = segs.length === 1 && clip.start === 0 && clip.end == null
   // 同じ動画の他のクリップ（ライブラリからのプレビュー中は追加先プレイリストのもの）
   const srcPl = fromLib ? targetPl : playingPl
   const others = (srcPl?.items ?? []).filter(c => c.videoId === clip.videoId && c.id !== clip.id)
@@ -34,20 +44,47 @@ export default function PlayerOverlay(): JSX.Element | null {
   const mEnd = marks.end ?? Math.min(dur, Math.max(mStart + 0.5, currentTime))
 
   const labelLeft = clamp(pct(start), 0, 82)
+  const timeAt = (e: ReactPointerEvent<HTMLDivElement>): number => {
+    const r = e.currentTarget.getBoundingClientRect()
+    return clamp((e.clientX - r.left) / r.width, 0, 1) * dur
+  }
+  const onDown = (e: ReactPointerEvent<HTMLDivElement>): void => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return
+    e.currentTarget.setPointerCapture(e.pointerId)
+    drag.current = { last: Date.now() }
+    setScrubbing(true)
+    seekTo(timeAt(e), false)
+  }
+  const onMove = (e: ReactPointerEvent<HTMLDivElement>): void => {
+    if (!drag.current || Date.now() - drag.current.last < 80) return
+    drag.current.last = Date.now()
+    seekTo(timeAt(e), false)
+  }
+  const onUp = (e: ReactPointerEvent<HTMLDivElement>): void => {
+    if (!drag.current) return
+    drag.current = null
+    seekTo(timeAt(e), true)
+    window.setTimeout(() => setScrubbing(false), 300)
+  }
   return (
-    <div className="player-overlay" aria-hidden="true">
+    <div className="player-overlay">
+      <div className="po-hit" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
+        title="クリック・ドラッグでその位置へ移動">
       <div className="po-track">
         {others.map(c => (
           <div key={c.id} className="po-other" style={{ left: `${pct(c.start)}%`, width: `${Math.max(pct(c.end ?? dur) - pct(c.start), 0.4)}%` }} />
         ))}
-        {!isWhole && <div className="po-range" style={{ left: `${pct(start)}%`, width: `${Math.max(pct(end) - pct(start), 0.4)}%` }} />}
+        {!isWhole && segs.map((g, i) => (
+          <div key={i} className={'po-range' + (g.disabled ? ' off' : '')} style={{ left: `${pct(g.start)}%`, width: `${Math.max(pct(g.end ?? dur) - pct(g.start), 0.4)}%`, '--seg': segColor(g, i) } as CSSProperties} />
+        ))}
         {hasMark && <div className="po-mark" style={{ left: `${pct(mStart)}%`, width: `${Math.max(pct(mEnd) - pct(mStart), 0.4)}%` }} />}
         <div className="po-head" style={{ left: `${pct(currentTime)}%` }} />
       </div>
+      </div>
       <div className={"po-labels" + (hasMark && !isWhole ? " two" : "")}>
         {!isWhole && (
-          <span className="po-label po-label-range" style={{ left: `${labelLeft}%` }}>
-            {fmtTime(start)} → {clip.end != null ? fmtTime(clip.end) : '最後'}　({fmtDuration(end - start)})
+          <span className="po-label po-label-range" style={{ left: `${labelLeft}%`, '--seg': segColor(cur, curIdx) } as CSSProperties}>
+            {segs.length > 1 ? `区間 ${curIdx + 1}/${segs.length}　` : ''}{fmtTime(start)} → {cur.end != null ? fmtTime(cur.end) : '最後'}　({fmtDuration(end - start)})
           </span>
         )}
         {hasMark && (

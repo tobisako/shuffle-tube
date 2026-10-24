@@ -1,13 +1,14 @@
 import type { JSX } from 'react'
-import { useEffect, useRef, useState, type DragEvent } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from 'react'
 import type { Clip } from '@shared/types'
-import { clearPlaylist, deletePlaylist, getCurrentPlaylist, moveClip, newPlaylist, removeClip, renamePlaylist, switchPlaylist, useStore } from '../store'
+import { clearPlaylist, toggleChain, toggleSegmentDisabled, updateClip, deletePlaylist, getCurrentPlaylist, moveClip, newPlaylist, removeClip, renamePlaylist, switchPlaylist, useStore } from '../store'
 import { useIsMobile } from '../useIsMobile'
 import { addClipFromSameVideo, closeClipEditor, onPlayingClipRemoved, openClipEditor, play, stopPlayback } from '../player'
 import { thumbUrl, watchUrl } from '../youtube'
 import { fmtDuration, fmtTime } from '../time'
 import RangeEditor from './RangeEditor'
 import { setDraggingClip } from '../dnd'
+import { segColor, segmentsOf, totalLength } from '../segments'
 import { isComposing } from '../ime'
 
 export default function ItemList(): JSX.Element | null {
@@ -22,6 +23,8 @@ export default function ItemList(): JSX.Element | null {
   const [name, setName] = useState(pl?.name ?? '')
   const dragId = useRef<string | null>(null)
   const [drop, setDrop] = useState<{ id: string; before: boolean } | null>(null)
+  /** メモを書いているクリップ */
+  const [memoEdit, setMemoEdit] = useState<string | null>(null)
 
   useEffect(() => { setName(pl?.name ?? '') }, [pl?.id, pl?.name])
   useEffect(() => {
@@ -74,7 +77,7 @@ export default function ItemList(): JSX.Element | null {
       {isMobile && (
         <div className="mobile-pl-select">
           <select value={pl.id} onChange={e => switchPlaylist(e.target.value)} title="プレイリストを切り替え">
-            {playlists.map(p => <option key={p.id} value={p.id}>{p.name}（{p.items.length}）</option>)}
+            {playlists.map(p => <option key={p.id} value={p.id}>{p.chain ? '🔗 ' : ''}{p.name}（{p.items.length}）</option>)}
           </select>
           {!readOnly && <button className="icon-btn" title="新しいプレイリスト" onClick={() => { newPlaylist(); useStore.setState({ focusNameInput: Date.now() }) }}>＋</button>}
         </div>
@@ -84,6 +87,11 @@ export default function ItemList(): JSX.Element | null {
           onChange={e => setName(e.target.value)} onBlur={commitName}
           onKeyDown={e => { if (isComposing(e)) return; if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
         <span className="count">{pl.items.length} クリップ</span>
+        <label className={'chain-toggle' + (pl.chain ? ' on' : '')}
+          title="ON にしたリストどうしは、最後まで行ったら並び順で次の ON のリストへ続けて再生します">
+          <span className="switch-mini"><input type="checkbox" checked={!!pl.chain} onChange={() => toggleChain(pl.id)} /><span className="knob" /></span>
+          またいで再生
+        </label>
         {!readOnly && <button className="text-btn danger" onClick={onClearList} title="このプレイリストのクリップを全て削除">全削除</button>}
         {!readOnly && <button className="text-btn danger" onClick={onDeleteList} title="このプレイリストを削除">リスト削除</button>}
       </div>
@@ -103,7 +111,7 @@ export default function ItemList(): JSX.Element | null {
             <li key={clip.id} className="item-wrap">
               <div
                 className={'item' + (isPlaying ? ' playing' : '') + (clip.error ? ' error' : '') + dropCls}
-                draggable={!readOnly}
+                draggable={!readOnly && memoEdit !== clip.id}
                 onClick={() => play(pl.id, clip.id)}
                 onDragStart={e => { dragId.current = clip.id; setDraggingClip({ playlistId: pl.id, clipId: clip.id }); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', clip.id) } catch { /* ignore */ } }}
                 onDragEnd={() => { dragId.current = null; setDraggingClip(null); setDrop(null) }}
@@ -127,15 +135,39 @@ export default function ItemList(): JSX.Element | null {
                 <div className="idx">{isPlaying ? '♪' : idx + 1}</div>
                 <div className="thumb-wrap">
                   <img className="thumb" src={thumbUrl(clip.videoId)} alt="" loading="lazy" draggable={false} />
-                  <span className="thumb-badge">{clip.end != null ? fmtDuration(clip.end - clip.start) : (clip.start ? `${fmtTime(clip.start, false)}〜` : '全体')}</span>
+                  <span className="thumb-badge">{clip.more?.length
+                    ? (() => { const tl = totalLength(clip, clip.duration ?? null); return tl != null ? fmtDuration(tl) : `${clip.more.length + 1}区間` })()
+                    : clip.end != null ? fmtDuration(clip.end - clip.start) : (clip.start ? `${fmtTime(clip.start, false)}〜` : '全体')}</span>
                 </div>
                 <div className="meta">
-                  <div className="title">{clip.label ? <><b>{clip.label}</b><span className="sep">·</span></> : null}{clip.title || clip.videoId}</div>
+                  {/* 動画名は投稿者が付けたものなのでそのまま出し、自分のメモは下の行に分ける */}
+                  <div className="title">{clip.title || clip.videoId}</div>
                   <div className="sub">
-                    <span className="range">{clip.end != null || clip.start ? `${fmtTime(clip.start)} → ${clip.end != null ? fmtTime(clip.end) : '最後'}` : '動画全体'}</span>
+                    {clip.more?.length ? (
+                      <span className="range segs">{segmentsOf(clip).map((g, i) => (
+                        <button key={i} type="button" className={'seg-pill' + (g.disabled ? ' off' : '')} style={{ '--seg': segColor(g, i) } as CSSProperties}
+                          title={g.disabled ? `区間 ${i + 1}: 無効（タップで有効にする）` : `区間 ${i + 1}: 有効（タップで無効にする＝一時的に再生しない）`}
+                          onClick={e => { e.stopPropagation(); toggleSegmentDisabled(pl.id, clip.id, i) }}>
+                          {fmtTime(g.start, false)}–{g.end != null ? fmtTime(g.end, false) : '最後'}
+                        </button>
+                      ))}</span>
+                    ) : (
+                      <span className="range">{clip.end != null || clip.start ? `${fmtTime(clip.start)} → ${clip.end != null ? fmtTime(clip.end) : '最後'}` : '動画全体'}</span>
+                    )}
                     {clip.author && <span className="author">{clip.author}</span>}
                     {clip.error && <span className="err">⚠ {clip.error}</span>}
                     {!clip.title && !clip.error && <span className="author">取得中…</span>}
+                  </div>
+                  <div className="clip-memo-row" onClick={e => e.stopPropagation()}>
+                    {memoEdit === clip.id ? (
+                      <input className="clip-memo-in" autoFocus value={clip.label} maxLength={200} placeholder="メモ（例: サビ、練習ポイント）"
+                        onChange={e => updateClip(pl.id, clip.id, { label: e.target.value })}
+                        onBlur={() => setMemoEdit(null)}
+                        onKeyDown={e => { if (isComposing(e)) return; if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur() }} />
+                    ) : (
+                      <span className={'clip-memo' + (clip.label ? '' : ' empty')} onClick={() => setMemoEdit(clip.id)}
+                        title="タップ（クリック）でメモを編集">{clip.label || '＋ メモ'}</span>
+                    )}
                   </div>
                 </div>
                 <div className="actions" onClick={e => e.stopPropagation()}>

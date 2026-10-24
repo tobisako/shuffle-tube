@@ -2,7 +2,7 @@
   "name": "shuffle-tube",
   "productName": "ShuffleTube",
   "version": "1.5.0",
-  "description": "YouTube 動画の好きな区間（クリップ）だけを並べて連続再生するプレイリストアプリ。macOS / Windows（Electron）、スマホブラウザ、Android（Capacitor）。",
+  "description": "YouTube 動画の好きな区間（クリップ）だけを並べて連続再生するプレイリストアプリ。macOS / Windows（Electron）、スマホブラウザ。",
   "main": "./out/main/index.js",
   "author": "tobisako",
   "license": "MIT",
@@ -25,21 +25,9 @@
     "dist": "electron-vite build && electron-builder --mac",
     "dist:mac": "electron-vite build && electron-builder --mac",
     "dist:win": "electron-vite build && electron-builder --win",
-    "dist:dir": "electron-vite build && electron-builder --mac --dir",
-    "android:sync": "electron-vite build && cap sync android",
-    "android:apk": "bash scripts/build-android.sh"
-  },
-  "dependencies": {
-    "@capacitor-community/keep-awake": "^8.0.1",
-    "@capacitor/android": "^8.5.1",
-    "@capacitor/browser": "^8.0.4",
-    "@capacitor/core": "^8.5.1",
-    "@capacitor/filesystem": "^8.1.3",
-    "@capacitor/share": "^8.0.1"
+    "dist:dir": "electron-vite build && electron-builder --mac --dir"
   },
   "devDependencies": {
-    "@capacitor/assets": "^3.0.5",
-    "@capacitor/cli": "^8.5.1",
     "@types/node": "^26.4.1",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.18",

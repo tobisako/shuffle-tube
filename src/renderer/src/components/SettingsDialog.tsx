@@ -2,7 +2,7 @@ import type { JSX } from 'react'
 import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
 import type { LanInfo, MediaKeysStatus, Settings } from '@shared/types'
-import { clearHistory, replaceSharedData, toast, updateSettings, useStore } from '../store'
+import { clearHistory, toast, updateSettings, useStore } from '../store'
 
 interface Row { key: keyof Settings; label: string; desc: string; web?: boolean }
 const ROWS: Row[] = [
@@ -18,44 +18,7 @@ export default function SettingsDialog(): JSX.Element {
   const settings = useStore(s => s.settings)
   const historyCount = useStore(s => s.history.length)
   const isWeb = useStore(s => s.isWeb)
-  const isNative = useStore(s => s.isNative)
   const rows = isWeb ? ROWS.filter(r => r.web) : ROWS
-  const [macUrl, setMacUrl] = useState(settings.macUrl)
-  const [syncBusy, setSyncBusy] = useState<'pull' | 'push' | null>(null)
-  const [syncMsg, setSyncMsg] = useState('')
-  const commitMacUrl = (): void => { if (macUrl !== settings.macUrl) updateSettings({ macUrl: macUrl.trim() }) }
-  const pull = async (): Promise<void> => {
-    const remote = window.api.remote
-    if (!remote || !macUrl.trim()) { setSyncMsg('Mac の URL を入力してください'); return }
-    commitMacUrl()
-    setSyncBusy('pull'); setSyncMsg('Mac から取得中…')
-    try {
-      const d = await remote.fetchData(macUrl)
-      const n = d.playlists.reduce((a, p) => a + p.items.length, 0)
-      if (!window.confirm(`Mac のデータ（プレイリスト ${d.playlists.length} 件 / クリップ ${n} 件 / ライブラリ ${d.library.length} 本）で、このスマホのデータを置き換えます。よろしいですか？`)) { setSyncMsg('取り消しました'); return }
-      replaceSharedData(d)
-      setSyncMsg(`取り込みました（クリップ ${n} 件）`)
-      toast('Mac から取り込みました')
-    } catch (e) {
-      setSyncMsg(`取得に失敗: ${(e as Error).message}。Mac 側で「スマホ連携」が ON か、同じ Wi-Fi かを確認してください`)
-    } finally { setSyncBusy(null) }
-  }
-  const push = async (): Promise<void> => {
-    const remote = window.api.remote
-    if (!remote || !macUrl.trim()) { setSyncMsg('Mac の URL を入力してください'); return }
-    commitMacUrl()
-    const s = useStore.getState()
-    const n = s.playlists.reduce((a, p) => a + p.items.length, 0)
-    if (!window.confirm(`このスマホのデータ（プレイリスト ${s.playlists.length} 件 / クリップ ${n} 件 / ライブラリ ${s.library.length} 本）で、Mac 側のデータを置き換えます。よろしいですか？`)) return
-    setSyncBusy('push'); setSyncMsg('Mac へ送信中…')
-    try {
-      await remote.pushData(macUrl, { playlists: s.playlists, library: s.library, history: s.history })
-      setSyncMsg('Mac へ送りました')
-      toast('Mac へ送りました')
-    } catch (e) {
-      setSyncMsg(`送信に失敗: ${(e as Error).message}`)
-    } finally { setSyncBusy(null) }
-  }
   const [lan, setLan] = useState<LanInfo | null>(null)
   const [qr, setQr] = useState<string>('')
   useEffect(() => {
@@ -104,24 +67,6 @@ export default function SettingsDialog(): JSX.Element {
             )
           })}
         </div>
-        {isNative && (
-          <div className="lan-section">
-            <div className="setting-row" style={{ cursor: 'default' }}>
-              <div className="sr-text">
-                <div className="sr-label">Mac と同期</div>
-                <div className="sr-desc">同じ Wi-Fi にいるときだけ使えます。Mac 側の設定で「スマホ連携」を ON にし、そこに表示される URL を入れてください。自動では同期しません。</div>
-              </div>
-            </div>
-            <div className="lan-body sync-body">
-              <input className="lib-filter" value={macUrl} onChange={e => setMacUrl(e.target.value)} onBlur={commitMacUrl} placeholder="http://192.168.1.23:8787/" inputMode="url" autoCapitalize="off" autoCorrect="off" />
-              <div className="sync-btns">
-                <button className="text-btn" disabled={!!syncBusy} onClick={pull}>{syncBusy === 'pull' ? '取得中…' : '⬇ Mac から取り込む'}</button>
-                <button className="text-btn" disabled={!!syncBusy} onClick={push}>{syncBusy === 'push' ? '送信中…' : '⬆ Mac へ送る'}</button>
-              </div>
-              {syncMsg && <div className="sr-desc">{syncMsg}</div>}
-            </div>
-          </div>
-        )}
         {!isWeb && (
           <div className="lan-section">
             <label className="setting-row">
@@ -148,7 +93,6 @@ export default function SettingsDialog(): JSX.Element {
                           {lan.localUrl && <> PC の IP が変わっても切れない URL: <b className="lan-apk">{lan.localUrl}</b>（スマホによっては開けません。そのときは上の URL を使う）</>}
                         </div>
                       )}
-                      {lan.apk && lan.urls[0] && <div className="sr-desc">Android アプリ版（APK）: スマホの Chrome で <b className="lan-apk">{lan.urls[0]}app.apk</b> を開くとダウンロードできます</div>}
                     </div>
                     {qr && <img className="lan-qr" src={qr} alt="QR" />}
                   </>
@@ -160,7 +104,7 @@ export default function SettingsDialog(): JSX.Element {
             )}
           </div>
         )}
-        {isWeb && !isNative && !window.matchMedia('(display-mode: standalone)').matches && (
+        {isWeb && !window.matchMedia('(display-mode: standalone)').matches && (
           <div className="lan-section">
             <div className="setting-row" style={{ cursor: 'default' }}>
               <div className="sr-text">

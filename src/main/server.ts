@@ -46,8 +46,10 @@ export function serveStatic(root: string, req: http.IncomingMessage, res: http.S
 }
 
 /**
- * 本番用: renderer を 127.0.0.1 の空きポートから配信する。
+ * 本番用: renderer を 127.0.0.1 の空きポートから配信し、http://localhost:<port>/ で読み込む。
  * file:// で読み込むと YouTube 埋め込みが Referer 無しでエラー 153 になるため。
+ * また http://127.0.0.1:<port>/ のような IP アドレスのページだと、一部の動画（Ado の公式動画など）が
+ * エラー 150（埋め込み禁止）になる（2026-10-23 に確認。localhost の名前なら再生できる）。
  */
 export function startStaticServer(root: string): Promise<string> {
   const server = http.createServer((req, res) => {
@@ -57,7 +59,7 @@ export function startStaticServer(root: string): Promise<string> {
     server.on('error', reject)
     server.listen(0, '127.0.0.1', () => {
       const { port } = server.address() as AddressInfo
-      resolve(`http://127.0.0.1:${port}/`)
+      resolve(`http://localhost:${port}/`)
     })
   })
 }

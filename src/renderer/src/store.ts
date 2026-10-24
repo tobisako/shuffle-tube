@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { patchSegment, segmentsOf } from './segments'
 import { DEFAULT_SETTINGS, LIBRARY_ID, libraryClipId, type AppData, type Clip, type DataChange, type HistoryEntry, type LibraryVideo, type Playlist, type Settings } from '@shared/types'
 
 export interface Marks { start: number | null; end: number | null }
@@ -18,15 +19,13 @@ export interface AppState {
   sidebarTab: 'lists' | 'history'
   settingsOpen: boolean
   /** 区間エディタで編集中のクリップ。isNew = 「同じ動画から区間を追加」で作った直後（取り消しで削除） */
-  editing: { playlistId: string; clipId: string; isNew: boolean; returnTo: string | null } | null
+  editing: { playlistId: string; clipId: string; isNew: boolean; returnTo: string | null; seg: number; original: Clip | null } | null
   /** プレーヤーに読み込まれている動画の長さ（秒）。不明なら 0 */
   duration: number
   toast: { msg: string; key: number } | null
   focusNameInput: number
-  /** ブラウザ版・Android 版か（Electron でなければ true） */
+  /** ブラウザ版・クラウド版か（Electron でなければ true） */
   isWeb: boolean
-  /** Android アプリ版か */
-  isNative: boolean
   /** クラウド版（AWS）: 再生専用で、編集の操作を出さない */
   readOnly: boolean
   /** スマホ表示の下部タブ */
@@ -53,7 +52,6 @@ export const useStore = create<AppState>(() => ({
   toast: null,
   focusNameInput: 0,
   isWeb: false,
-  isNative: false,
   readOnly: false,
   mobileTab: 'playlist',
   draggingFrom: null,
@@ -114,7 +112,7 @@ export async function initStore(): Promise<void> {
     library.push({ videoId: c.videoId, title: c.title, author: c.author, duration: c.duration ?? null, memo: '', addedAt: c.addedAt })
     migrated++
   }
-  useStore.setState({ playlists, settings, history: data.history, library, loaded: true, isWeb: ['web', 'android', 'cloud'].includes(window.api.platform), isNative: window.api.platform === 'android', readOnly: window.api.platform === 'cloud', mobileTab: settings.view === 'library' ? 'library' : 'playlist' })
+  useStore.setState({ playlists, settings, history: data.history, library, loaded: true, isWeb: ['web', 'cloud'].includes(window.api.platform), readOnly: false, mobileTab: settings.view === 'library' ? 'library' : 'playlist' })
   if (settings.currentPlaylistId !== data.settings.currentPlaylistId) {
     window.api.saveSettings({ currentPlaylistId: settings.currentPlaylistId })
   }
@@ -332,6 +330,26 @@ export function movePlaylist(from: number, to: number): void {
   })
 }
 
+/** 区間の有効 / 無効を切り替える */
+export function toggleSegmentDisabled(playlistId: string, clipId: string, i: number): void {
+  const s = useStore.getState()
+  const clip = getPlaylistById(s, playlistId)?.items.find(c => c.id === clipId)
+  const seg = clip ? segmentsOf(clip)[i] : undefined
+  if (!clip || !seg) return
+  const disabled = !seg.disabled
+  updateClip(playlistId, clipId, patchSegment(clip, i, { disabled: disabled || undefined }))
+  toast(`区間 ${i + 1} を${disabled ? '無効にしました（再生しません）' : '有効にしました'}`)
+}
+
+/** リストの「またいで再生」を切り替える */
+export function toggleChain(playlistId: string): void {
+  const pl = useStore.getState().playlists.find(p => p.id === playlistId)
+  if (!pl) return
+  const chain = !pl.chain
+  updatePlaylist(playlistId, p => ({ ...p, chain: chain || undefined }))
+  toast(chain ? `「${pl.name}」: 最後まで行ったら、次の ON のリストへ続けて再生します` : `「${pl.name}」: このリストの中だけで再生します`)
+}
+
 export function newPlaylist(name?: string): Playlist {
   const n = useStore.getState().playlists.length + 1
   const pl: Playlist = { id: uid(), name: (name || '').trim() || `プレイリスト ${n}`, items: [] }
@@ -377,15 +395,3 @@ export function removeHistory(id: string): void { useStore.setState({ history: u
 
 // 開発時のみ: 動作確認用にストアを公開
 if (import.meta.env.DEV) (window as unknown as { __store: typeof useStore }).__store = useStore
-
-/** Android 版: Mac から取り込んだデータでスマホ側を置き換える（保存もする） */
-export function replaceSharedData(data: { playlists: Playlist[]; library: LibraryVideo[]; history: HistoryEntry[] }): void {
-  const s = useStore.getState()
-  const playlists = data.playlists.length ? data.playlists : [{ id: uid(), name: 'マイプレイリスト', items: [] }]
-  const patch: Partial<AppState> = { playlists, library: data.library, history: data.history, editing: null }
-  if (!playlists.some(p => p.id === s.settings.currentPlaylistId)) {
-    patch.settings = { ...s.settings, currentPlaylistId: playlists[0].id }
-    window.api.saveSettings({ currentPlaylistId: playlists[0].id })
-  }
-  useStore.setState(patch)
-}

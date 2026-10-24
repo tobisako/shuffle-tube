@@ -1,10 +1,12 @@
 /**
- * ShuffleTube クラウド版（スマホで再生だけするための簡易版）
+ * ShuffleTube クラウド版（外出先のスマホで使う版）
  *
- * Lambda の関数 URL 1 つで次の 3 つを受け持つ。データと画面は非公開の S3 に置く。
- *   GET  /<VIEW_TOKEN>/            … 画面（S3 の web/ 以下）。index.html にはクラウド版の印を足す
- *   GET  /<VIEW_TOKEN>/api/data    … プレイリストとライブラリ（S3 の data/ 以下）。?v=<前回の版> で変化が無ければ 204
- *   PUT  /upload/playlists|library … Mac のアプリからのデータ受け取り（ヘッダー x-upload-key が必要）
+ * Lambda の関数 URL 1 つで次を受け持つ。データと画面は非公開の S3 に置く。
+ *   GET  /<VIEW_TOKEN>/                     … 画面（S3 の web/ 以下）。index.html にはクラウド版の印を足す
+ *   GET  /<VIEW_TOKEN>/api/data             … プレイリストとライブラリ（S3 の data/ 以下）。?v=<前回の版> で変化が無ければ 204
+ *   PUT  /<VIEW_TOKEN>/api/playlists|library … スマホでの編集の保存。Mac のアプリが数秒ごとに確かめて取り込む
+ *   PUT  /upload/playlists|library          … Mac のアプリからのデータ受け取り（ヘッダー x-upload-key が必要）
+ * 保存したら、応答の x-data-version に保存後の版を返す（送った側が自分の変更を取り込み直さないため）。
  * 合言葉（VIEW_TOKEN）を知らない人には 404 を返す。
  */
 import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
@@ -51,6 +53,26 @@ async function readJson(key, fallback) {
   try { return JSON.parse(b.toString('utf8')) } catch { return fallback }
 }
 
+/** 今のデータとその版（中身のハッシュ）。版は GET と PUT の応答で同じ計算をする */
+async function currentData() {
+  const [playlists, library] = await Promise.all([readJson('data/playlists.json', []), readJson('data/library.json', [])])
+  const body = JSON.stringify({ playlists, library, history: [] })
+  return { body, version: createHash('sha1').update(body).digest('hex').slice(0, 16) }
+}
+
+/** 配列の JSON を data/<kind>.json に保存して、保存後の版を返す */
+async function saveData(kind, event) {
+  const body = event.isBase64Encoded ? Buffer.from(event.body ?? '', 'base64').toString('utf8') : (event.body ?? '')
+  let data
+  try { data = JSON.parse(body) } catch { return { statusCode: 400, body: 'Bad JSON' } }
+  if (!Array.isArray(data)) return { statusCode: 400, body: 'Array expected' }
+  await s3.send(new PutObjectCommand({
+    Bucket: BUCKET, Key: `data/${kind}.json`, Body: JSON.stringify(data), ContentType: 'application/json',
+  }))
+  const { version } = await currentData()
+  return { statusCode: 200, headers: { 'content-type': TYPES.json, 'cache-control': 'no-store', 'x-data-version': version }, body: JSON.stringify({ version }) }
+}
+
 export const handler = async (event) => {
   const method = event.requestContext?.http?.method ?? 'GET'
   const path = event.rawPath ?? '/'
@@ -60,27 +82,21 @@ export const handler = async (event) => {
   if (up) {
     if (method !== 'PUT') return { statusCode: 405, body: 'Method Not Allowed' }
     if (!same(event.headers?.['x-upload-key'], UPLOAD_KEY)) return { statusCode: 403, body: 'Forbidden' }
-    const body = event.isBase64Encoded ? Buffer.from(event.body ?? '', 'base64').toString('utf8') : (event.body ?? '')
-    let data
-    try { data = JSON.parse(body) } catch { return { statusCode: 400, body: 'Bad JSON' } }
-    if (!Array.isArray(data)) return { statusCode: 400, body: 'Array expected' }
-    await s3.send(new PutObjectCommand({
-      Bucket: BUCKET, Key: `data/${up[1]}.json`, Body: JSON.stringify(data), ContentType: 'application/json',
-    }))
-    return { statusCode: 204 }
+    return saveData(up[1], event)
   }
 
-  if (method !== 'GET' && method !== 'HEAD') return notFound()
   const prefix = `/${VIEW_TOKEN}`
   if (!VIEW_TOKEN || !(path === prefix || path.startsWith(prefix + '/'))) return notFound()
+  // スマホからの編集の保存
+  const save = /^\/api\/(playlists|library)$/.exec(path.slice(prefix.length))
+  if (save && method === 'PUT') return saveData(save[1], event)
+  if (method !== 'GET' && method !== 'HEAD') return notFound()
   // 相対パスの画面ファイルが正しく読めるよう、末尾の / を付けさせる
   if (path === prefix) return { statusCode: 302, headers: { location: prefix + '/' } }
 
   const rest = path.slice(prefix.length + 1) || 'index.html'
   if (rest === 'api/data') {
-    const [playlists, library] = await Promise.all([readJson('data/playlists.json', []), readJson('data/library.json', [])])
-    const body = JSON.stringify({ playlists, library, history: [] })
-    const version = createHash('sha1').update(body).digest('hex').slice(0, 16)
+    const { body, version } = await currentData()
     const headers = { 'content-type': TYPES.json, 'cache-control': 'no-store', 'x-data-version': version }
     // スマホは数秒ごとに問い合わせるので、変化が無ければ中身を返さない
     if (event.queryStringParameters?.v === version) return { statusCode: 204, headers }

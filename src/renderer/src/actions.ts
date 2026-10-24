@@ -1,4 +1,5 @@
-import { LIBRARY_ID, type Clip, type Playlist } from '@shared/types'
+import { LIBRARY_ID, type Clip, type Playlist, type Segment } from '@shared/types'
+import { MAX_SEGMENTS } from './segments'
 import { addClips, ensureInLibrary, fillMeta, getCurrentPlaylist, makeClip, toast, uid, updateSettings, useStore } from './store'
 import { ID_RE, importYouTubePlaylist, parseInput } from './youtube'
 
@@ -66,6 +67,17 @@ export async function exportJson(): Promise<void> {
   if (ok) toast('書き出しました')
 }
 
+/** 読み込んだ JSON の 2 つ目以降の区間（不正なものは捨てる。最大 4 つ） */
+function parseSegments(raw: unknown[]): Segment[] {
+  const out: Segment[] = []
+  for (const r of raw as Record<string, unknown>[]) {
+    if (!r || typeof r.start !== 'number' || r.start < 0) continue
+    const end = typeof r.end === 'number' && r.end > r.start ? r.end : null
+    out.push({ start: r.start, end, ...(typeof r.color === 'string' ? { color: r.color } : {}) })
+  }
+  return out.slice(0, MAX_SEGMENTS - 1)
+}
+
 export async function importJson(): Promise<void> {
   const text = await window.api.importPlaylists()
   if (text == null) return
@@ -91,6 +103,8 @@ export async function importJson(): Promise<void> {
           label: typeof it.label === 'string' ? it.label : '',
           addedAt: typeof it.addedAt === 'number' ? it.addedAt : Date.now(),
           duration: typeof it.duration === 'number' ? it.duration : null,
+          ...(typeof it.color === 'string' ? { color: it.color } : {}),
+          ...(Array.isArray(it.more) ? { more: parseSegments(it.more) } : {}),
         })
       }
       imported.push({ id: uid(), name: typeof p.name === 'string' && p.name ? p.name : 'インポート', items })

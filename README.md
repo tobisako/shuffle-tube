@@ -5,7 +5,7 @@ YouTube 動画の **好きな区間（クリップ）だけ** を並べて連続
 
 ShuffleTube is a playlist app that plays only the parts you want from YouTube videos.
 Register clips (start / end) from any video, order them, loop them, and edit ranges with a drag‑and‑drop timeline.
-Runs as a desktop app (macOS / Windows, Electron), in a phone browser on your LAN, and as a standalone Android app (Capacitor).
+Runs as a desktop app (macOS / Windows, Electron) and in a phone browser on your LAN (served by the desktop app).
 
 - 再生は YouTube の公式埋め込みプレーヤー（IFrame Player API）。動画のダウンロードや広告除去は行いません
 - API キー・ログイン不要
@@ -13,13 +13,12 @@ Runs as a desktop app (macOS / Windows, Electron), in a phone browser on your LA
 
 ## できること
 
-- **クリップ**: 動画 ID + 開始秒 + 終了秒（終了なし = 最後まで）。同じ動画から複数の区間を登録できます
+- **クリップ**: 動画 ID + 開始秒 + 終了秒（終了なし = 最後まで）。1 つのクリップに区間を最大 5 つ作れ（上から順に続けて再生）、区間ごとに色を付けられます。同じ動画から別のクリップも作れます
 - **区間編集は GUI**: 再生しながら「⏺ 開始点」「⏹ 終了点」を押して追加。行の ✎ でタイムラインのつまみをドラッグ、ホイール / ピンチで拡大縮小、±1秒 / ±0.1秒 ボタン、「最後まで」
 - **連続再生**: 区間の終わりで自動的に次のクリップへ。同じ動画ならシークだけで切り替え。シャッフル、リピート（オフ / 全曲 / 1曲）
 - **ライブラリ**: URL を貼って動画を溜め、一覧からプレビュー再生しながら区間を切り出す
 - **プレイリスト複数**、並べ替え、視聴履歴、JSON 書き出し / 読み込み
-- **スマホ連携**: PC が LAN サーバーになり、同じ Wi-Fi のスマホのブラウザで同じデータを使える
-- **Android アプリ版**: PC が無くても単体で動く（データはスマホ内）。「Mac と同期」で PC と丸ごと入れ替え
+- **スマホ連携**: PC が LAN サーバーになり、同じ Wi-Fi のスマホのブラウザで同じデータを使える（スマホ用のアプリは無く、ブラウザだけで動く）
 - 設定で個別 ON/OFF: メディアキー、常に最前面、ミニプレーヤー、音量・速度の記憶、履歴、スリープ防止
 
 詳細は [docs/仕様.md](docs/仕様.md) を参照してください。
@@ -32,7 +31,6 @@ Runs as a desktop app (macOS / Windows, Electron), in a phone browser on your LA
 |---|---|---|
 | macOS (Apple Silicon) | `ShuffleTube-x.y.z-mac-arm64.dmg` | 右クリック →「開く」で Gatekeeper を通す |
 | Windows (x64) | `ShuffleTube-x.y.z-win-x64.exe`（インストーラ） / `portable` | SmartScreen の警告は「詳細情報」→「実行」 |
-| Android | `ShuffleTube.apk` | 「提供元不明のアプリ」を許可してインストール。開発者モードは不要 |
 
 自分でビルドする場合は下の「開発」を参照してください。
 
@@ -59,24 +57,24 @@ Runs as a desktop app (macOS / Windows, Electron), in a phone browser on your LA
 | Command + , （Windows: Ctrl + ,） | 設定 |
 | メディアキー | 前 / 再生停止 / 次（macOS はアクセシビリティの許可が必要） |
 
+### スマホで使う（外出先・SIM 回線）
+
+AWS（Lambda の関数 URL + S3）に置いた画面を、スマホのブラウザで開きます。再生も編集（区間の編集・有効 / 無効など）もできます。
+
+- Mac のアプリは、プレイリストとライブラリが変わるたびに、約 3 秒後に AWS へ送ります（送り先と書き込み用の鍵はデータフォルダの `cloud.json`）
+- スマホの画面は、開いている間 5 秒ごとに変更を確かめます。Mac で保存してからスマホに出るまで、およそ 5〜10 秒です
+- スマホで編集すると AWS に保存され、Mac のアプリが 5 秒ごとに確かめて取り込みます（およそ 2〜5 秒で Mac に届きます）
+- URL に合言葉が入っており、合言葉を知らない人には何も見せず、書き込みもさせません
+- 画面や Lambda のコードを直したら `bash scripts/deploy-cloud.sh` で AWS 側を更新します（合言葉と鍵は `cloud/.deploy.json`。Git に含めない）
+
 ### スマホで使う（同じ Wi-Fi）
 
 1. デスクトップ版の設定で「スマホ連携（同じ Wi-Fi に公開）」を ON にします
-2. 表示された URL（例 `http://192.168.1.23:8787/`）をスマホのブラウザで開くか、QR コードを読み取ります
+2. 表示された URL（例 `http://192-168-1-23.nip.io:8787/`）をスマホのブラウザで開くか、QR コードを読み取ります。YouTube は IP アドレスのページ（`http://192.168.1.23:8787/`）に埋め込んだ動画を再生しないため、IP をそのまま返す DNS（nip.io）の名前で開きます。IP の URL で開いても自動でこの名前に移ります
 3. 同じプレイリスト・ライブラリが使えます。再生はスマホ自身で行い、編集は双方に即時反映されます
 4. ホーム画面に置くには、スマホの Chrome の ⋮ メニューから「ホーム画面に追加」を選びます。ShuffleTube のアイコンでショートカットができます（Chrome のタブで開きます）。設定画面に出る `http://<PCの名前>.local:8787/` の URL で追加すると、PC の IP が変わってもショートカットが切れません
 
 認証はありません。同じ LAN 内からのみ見える前提で、使わないときは OFF にしてください。
-
-### Android アプリ版
-
-PC が無くても単体で動きます。データはスマホ内に保存されます。
-
-1. `ShuffleTube.apk` をスマホの Chrome でダウンロード（Releases、またはデスクトップ版の「スマホ連携」が ON のとき `http://<PCのIP>:8787/app.apk`）
-2. APK をタップし、「提供元不明のアプリ」の許可を与えてインストール
-3. 設定の「Mac と同期」に PC の URL を入れると、「Mac から取り込む」「Mac へ送る」で丸ごと入れ替えできます（自動同期はしません）
-
-画面を消す・アプリを裏に回すと再生は止まります（YouTube 側の仕様）。
 
 ## 開発
 
@@ -92,21 +90,17 @@ npm run typecheck
 |---|---|---|
 | macOS | `npm run dist:mac` | `dist/*.dmg`, `dist/mac-arm64/ShuffleTube.app` |
 | Windows | `npm run dist:win`（Windows 上、または macOS からのクロスビルド） | `dist/*.exe` |
-| Android | `npm run android:apk` | `dist/ShuffleTube.apk` |
 
-Android のビルドには JDK 21 と Android SDK（platforms;android-36、build-tools）が必要です。`JAVA_HOME` / `ANDROID_HOME` が未設定なら `scripts/build-android.sh` がよくある場所を探します。
-release 署名には `android/keystore.properties`（`storeFile` / `storePassword` / `keyAlias` / `keyPassword`）と鍵ファイルを用意します。無ければ debug 署名になります。鍵は Git に含めません。
-
-GitHub Actions（`.github/workflows/build.yml`）で macOS / Windows / Android を自動ビルドし、`v*` タグを push すると Release に成果物を添付します。Android の release 署名には Secrets（`ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD`）が必要で、無い場合 CI は APK を添付しません（手元で署名した APK を Release に上げます）。
+GitHub Actions（`.github/workflows/build.yml`）で macOS / Windows を自動ビルドし、`v*` タグを push すると Release に成果物を添付します。
 
 ### 構成
 
 ```
 src/main/      Electron main（ウィンドウ、メニュー、IPC、メディアキー、スリープ防止、JSON 保存、localhost 配信、LAN サーバー）
 src/preload/   contextBridge（window.api）
-src/renderer/  React UI（store.ts = zustand、player.ts = 再生制御、components/、webApi.ts = ブラウザ版、nativeApi.ts = Android 版）
+src/renderer/  React UI（store.ts = zustand、player.ts = 再生制御、components/、webApi.ts = ブラウザ版、cloudApi.ts = クラウド版）
 src/shared/    共有型・メタデータ取得ロジック
-android/       Capacitor の Android プロジェクト（生成物は Git に含めない）
+cloud/         クラウド版（AWS Lambda、未公開）
 build/ assets/ アイコン
 docs/          仕様書
 ```

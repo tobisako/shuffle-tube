@@ -20,7 +20,8 @@ export default function NowBar(): JSX.Element {
   const isMobile = useIsMobile()
   const beforeMute = useRef(50)
   const idx = clip && pl ? pl.items.findIndex(c => c.id === clip.id) + 1 : 0
-  const title = clip ? clip.label || clip.title || clip.videoId : '—'
+  // 動画名は投稿者が付けたものなのでそのまま出し、自分のメモは下の行に添える
+  const title = clip ? clip.title || clip.videoId : '—'
 
   return (
     <div className="now-bar">
@@ -29,6 +30,7 @@ export default function NowBar(): JSX.Element {
         <div className="now-sub">
           {clip && pl ? `${pl.name}　${idx} / ${pl.items.length}` + (clip.author ? `　·　${clip.author}` : '') : 'クリップを選んでください'}
         </div>
+        {clip?.label && <div className="now-memo" title={clip.label}>📝 {clip.label}</div>}
       </div>
       {clip && !mini && (
         <div className="now-time">

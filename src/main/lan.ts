@@ -1,9 +1,6 @@
 import http from 'node:http'
 import os from 'node:os'
-import fs from 'node:fs'
-import path from 'node:path'
 import { execFileSync } from 'node:child_process'
-import { app } from 'electron'
 import type { AddressInfo } from 'node:net'
 import { serveStatic } from './server'
 import { store } from './store'
@@ -34,16 +31,6 @@ export function lanAddresses(): string[] {
   return out.map(o => o.addr)
 }
 
-/** 配布用 APK の場所: アプリ同梱の resources/ または開発ツリーの dist/ */
-export function findApk(): string | null {
-  const candidates = [
-    path.join(process.resourcesPath || '', 'ShuffleTube.apk'),
-    path.join(app.getAppPath(), '..', '..', 'ShuffleTube.apk'),
-    path.join(process.cwd(), 'dist', 'ShuffleTube.apk'),
-  ]
-  for (const c of candidates) { try { if (fs.existsSync(c) && fs.statSync(c).size > 0) return c } catch { /* ignore */ } }
-  return null
-}
 
 /** この PC の Bonjour / mDNS 名（例 my-mac.local）。DHCP で IP が変わっても同じ URL で開ける */
 let cachedLocalName: string | null | undefined
@@ -69,7 +56,6 @@ export function lanInfo(): LanInfo {
     urls: server ? lanAddresses().map(a => `http://${a.replace(/\./g, '-')}.nip.io:${port}/`) : [],
     localUrl: local ? `http://${local}:${port}/` : undefined,
     error: lastError,
-    apk: !!findApk(),
   }
 }
 
@@ -135,20 +121,6 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse, root:
       return
     }
     json(res, 404, { error: 'not found' })
-    return
-  }
-  // Android 版 APK（dist/ にあれば配信。スマホの Chrome でこの URL を開いてインストール）
-  if (p === '/app.apk' && req.method === 'GET') {
-    const apk = findApk()
-    if (!apk) { res.writeHead(404); res.end('APK がありません'); return }
-    const st = fs.statSync(apk)
-    res.writeHead(200, {
-      'Content-Type': 'application/vnd.android.package-archive',
-      'Content-Length': st.size,
-      'Content-Disposition': 'attachment; filename="ShuffleTube.apk"',
-      'Cache-Control': 'no-store',
-    })
-    fs.createReadStream(apk).pipe(res)
     return
   }
   // SPA: 未知のパスは index.html

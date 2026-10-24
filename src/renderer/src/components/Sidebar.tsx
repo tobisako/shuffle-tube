@@ -1,6 +1,6 @@
 import type { JSX } from 'react'
 import { useEffect, useRef, useState } from 'react'
-import { moveClipToPlaylist, movePlaylist, newPlaylist, renamePlaylist, setView, switchPlaylist, toast, useStore } from '../store'
+import { moveClipToPlaylist, movePlaylist, toggleChain, newPlaylist, renamePlaylist, setView, switchPlaylist, toast, useStore } from '../store'
 import { getDraggingClip, setDraggingClip } from '../dnd'
 import { handleCommand } from '../commands'
 import { LIBRARY_ID } from '@shared/types'
@@ -144,7 +144,14 @@ function PlaylistNav(): JSX.Element {
             )}
             {dropId === pl.id
               ? <span className="pl-drop-hint">ここへ移動</span>
-              : <span className="pl-count">{pl.items.length}</span>}
+              : <>
+                <button type="button" className={'pl-chain' + (pl.chain ? ' on' : '')} draggable={false}
+                  title={pl.chain ? 'またいで再生: ON（最後まで行ったら次の ON のリストへ続ける）。クリックで OFF' : 'またいで再生: OFF（このリストの中だけ）。クリックで ON'}
+                  onClick={e => { e.stopPropagation(); toggleChain(pl.id) }} onDoubleClick={e => e.stopPropagation()}>
+                  <span className="pl-chain-knob" />
+                </button>
+                <span className="pl-count">{pl.items.length}</span>
+              </>}
           </li>
         ))}
       </ul>
