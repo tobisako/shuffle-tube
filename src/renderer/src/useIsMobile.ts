@@ -13,3 +13,6 @@ export function useIsMobile(): boolean {
   }, [])
   return m
 }
+
+/** 幅の狭い画面（スマホ）か（React の外で使う） */
+export const isMobileScreen = (): boolean => window.matchMedia(QUERY).matches

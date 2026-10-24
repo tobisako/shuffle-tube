@@ -8,6 +8,7 @@ import { allDisabled, firstStart, playSegmentsOf, segmentsOf } from './segments'
 import { addClips, addHistory, fillMeta, getPlayingClip, getPlayingPlaylist, getPlaylistById, removeClip, toast, updateClip, updatePlaylist, updateSettings, useStore, type PlayingRef } from './store'
 import { loadYT, type YTNamespace, type YTPlayer } from './youtube'
 import { fmtTime, round1 } from './time'
+import { isMobileScreen } from './useIsMobile'
 import { uid } from './store'
 
 const trace = (...a: unknown[]): void => {
@@ -166,6 +167,8 @@ function onReady(): void {
     const clip = pl?.items.find(c => c.id === last.clipId)
     if (pl && clip) {
       useStore.setState({ playing: { playlistId: pl.id, clipId: clip.id }, currentTime: firstStart(clip) })
+      // スマホはリストを1つしか表示しないので、前回再生していたリストを表示する
+      if (isMobileScreen() && s.settings.currentPlaylistId !== pl.id) updateSettings({ currentPlaylistId: pl.id })
       loadedVideoId = clip.videoId
       player!.cueVideoById({ videoId: clip.videoId, startSeconds: firstStart(clip) })
       startWatchdog()
@@ -422,12 +425,13 @@ function onClipEnded(): void {
 
 /**
  * 次のクリップを再生する。リストをまたいだときは、再生中のリストを表示していたなら表示も次のリストへ切り替える
- * （別のリストを見ているときは、見ている画面を変えない）
+ * （別のリストを見ているときは、見ている画面を変えない。スマホはリストを1つしか表示しないので、常に切り替える）
  */
 function playNext(ref: PlayingRef): void {
   const s = useStore.getState()
   const from = s.playing?.playlistId
-  if (from && ref.playlistId !== from && s.settings.view === 'playlist' && s.settings.currentPlaylistId === from) {
+  const follow = isMobileScreen() || (s.settings.view === 'playlist' && s.settings.currentPlaylistId === from)
+  if (from && ref.playlistId !== from && follow) {
     updateSettings({ currentPlaylistId: ref.playlistId })
   }
   play(ref.playlistId, ref.clipId)
